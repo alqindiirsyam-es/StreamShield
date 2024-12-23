@@ -17,7 +17,7 @@ public class SecurityShield: NSObject {
     
     static var dispatch: DispatchGroup?
     
-    public static func check(appName: String, apiKey: String, activity: UIViewController) {
+    public static func check(appName: String, apiKey: String) {
         Preference.setAppId(value: appName)
         Preference.setAccount(value: apiKey)
         pull()
@@ -36,7 +36,6 @@ public class SecurityShield: NSObject {
             if let response = Service.writeSync(message: tmessage) {
                 if response.isOk() {
                     let dataResp = response.getBody(key: "A112")
-                    print("dataResp = \(dataResp)")
                     Process.check(dataSS: dataResp)
                 } else {
                     Process.check(dataSS: "")
@@ -339,11 +338,11 @@ private class Process: NSObject {
                 return
             }
             subCheck(12)
-        } else if typeSecurity == 11 {
+        } else if typeSecurity == 12 {
             if checkBehaviourAnalysis() {
                 return
             }
-            subCheck(12)
+            subCheck(13)
         }
     }
     
@@ -822,10 +821,8 @@ private class Process: NSObject {
 private class Service {
     static func writeSync(message: TMessageSS, timeout: Int = 15 * 1000) -> TMessageSS? {
         do {
-            print(">> SENDING MESSAGE >> ", message.toLogString())
             if let data = try API.sGetResponse(sRequest: message.pack(), lTimeout: timeout, bKeepTOResp: true) {
                 let response = TMessageSS(data: data)
-                print("<< RESPONSE MESSAGE << ", response.toLogString())
                 return response
             }
         } catch {
