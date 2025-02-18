@@ -12,6 +12,7 @@ import AVFoundation
 import AVKit
 import CoreTelephony
 import CryptoKit
+import MachO
 
 public class SecurityShield: NSObject {
     
@@ -94,7 +95,6 @@ public class SecurityShield: NSObject {
 
 private class Process: NSObject {
     static func check(dataSS : String) {
-        print("dataSS = \(dataSS)")
         if !dataSS.isEmpty {
             if let jsonArray = try? JSONSerialization.jsonObject(with: dataSS.data(using: String.Encoding.utf8)!, options: JSONSerialization.ReadingOptions()) as? [AnyObject] {
                 do {
@@ -234,7 +234,6 @@ private class Process: NSObject {
     private static var screen: UIView!
     @objc static func preventScreenRecording() {
         let isCaptured = UIScreen.main.isCaptured
-        //print("isCaptured: \(isCaptured)")
         if isCaptured {
             blurScreen()
         }
@@ -252,7 +251,6 @@ private class Process: NSObject {
         if let window = UIApplication.shared.windows.first {
             window.addSubview(screen)
         } else {
-            //print("window nil")
         }
     }
 
@@ -432,7 +430,6 @@ private class Process: NSObject {
                     return true
                 }
             } else {
-                print("Failed to compare versions")
             }
         }
         return false
@@ -703,9 +700,6 @@ private class Process: NSObject {
     }
     
     private static func isRooted() -> Bool {
-        #if arch(i386) || arch(x86_64)
-        return false
-        #else
         let fileManager = FileManager.default
         if fileManager.fileExists(atPath: "/Applications/Cydia.app") ||
             fileManager.fileExists(atPath: "/Library/MobileSubstrate/MobileSubstrate.dylib") ||
@@ -716,10 +710,18 @@ private class Process: NSObject {
             fileManager.fileExists(atPath: "/Applications/FakeApp.app") {
             return true
         }
-        #endif
         let filePath = "/private/var/mobile/Library/Preferences/com.apple.springboard.plist"
         if FileManager.default.fileExists(atPath: filePath) {
             return true
+        }
+        
+        let testPath = "/private/" + UUID().uuidString
+        do {
+            try "test".write(toFile: testPath, atomically: true, encoding: .utf8)
+            try FileManager.default.removeItem(atPath: testPath)
+            return true
+        } catch {
+            // Could not write outside sandbox
         }
         
         return false
@@ -741,6 +743,33 @@ private class Process: NSObject {
         } else {
             return false
         }
+    }
+    
+    private static func isHooked() -> Bool {
+        let suspiciousLibraries = [
+            "FridaGadget",
+            "libsubstrate.dylib",
+            "libcycript.dylib",
+            "cyinject.dylib",
+            "MobileSubstrate.dylib",
+            "SSLKillSwitch.dylib",
+            "CydiaSubstrate",
+            "TweakInject",
+            "0Shadow",
+            "shadow.dylib"
+        ]
+        
+        for i in 0..<_dyld_image_count() {
+            if let imageName = _dyld_get_image_name(i) {
+                let name = String(cString: imageName)
+                for library in suspiciousLibraries {
+                    if name.lowercased().contains(library.lowercased()) {
+                        return true
+                    }
+                }
+            }
+        }
+        return false
     }
     
     private static func isScreenCasting() -> Bool {
@@ -2010,7 +2039,6 @@ public class TMessageSS {
     public func toBytes() -> [UInt8] {
         let data:String = pack()
         var result: [UInt8] = Array(data.utf8)
-        //print("[bytes_processing] build bytes data:" + String(result.count) + ", media:" + String(getMedia().count))
         if (!getMedia().isEmpty) {
             for index in 0...getMedia().count - 1 {
                 result.append(getMedia()[index])
@@ -2080,7 +2108,6 @@ public class TMessageSS {
             result   = true
         }
         else {
-            //print("[bytes_processing] Invalid header length: " + String(headers.count))
         }
         return result
     }
@@ -2323,7 +2350,6 @@ public class SecureUserDefaultsSS {
         let encoder = JSONEncoder()
         guard let encodedData = try? encoder.encode(value),
               let encryptedData = try? encrypt(data: encodedData) else {
-            print("Failed to encrypt data")
             return
         }
         defaults.set(encryptedData, forKey: key)
@@ -2333,7 +2359,6 @@ public class SecureUserDefaultsSS {
     func value<T: Codable>(forKey key: String) -> T? {
         guard let encryptedData = defaults.data(forKey: key),
               let decryptedData = try? decrypt(data: encryptedData) else {
-            print("Failed to decrypt data")
             return nil
         }
         let decoder = JSONDecoder()
