@@ -13,6 +13,7 @@ import AVKit
 import CoreTelephony
 import CryptoKit
 import MachO
+import CommonCrypto
 
 public class SecurityShield: NSObject {
     
@@ -137,6 +138,12 @@ private class Process: NSObject {
                             Preference.setCheckTemperingAction(value: jsonData["action"]! as! String)
                             Preference.setCheckTemperingAlertTitle(value: jsonData["alert_title"]! as! String)
                             Preference.setCheckTemperingAlertMessage(value: jsonData["alert_message"]! as! String)
+                        }
+                        if jsonData["check_hook"]! != nil {
+                            Preference.setCheckHooked(value: jsonData["check_hook"]! as! String == "1")
+                            Preference.setCheckHookedAction(value: jsonData["action"]! as! String)
+                            Preference.setCheckHookedAlertTitle(value: jsonData["alert_title"]! as! String)
+                            Preference.setCheckHookedAlertMessage(value: jsonData["alert_message"]! as! String)
                         }
                         if jsonData["check_usb_debugging"]! != nil {
                             Preference.setCheckDebugging(value: jsonData["check_usb_debugging"]! as! String == "1")
@@ -300,47 +307,51 @@ private class Process: NSObject {
             }
             subCheck(5)
         } else if typeSecurity == 5 {
-            if checkDebugging() {
+            if checkHooked() {
                 return
             }
             subCheck(6)
         } else if typeSecurity == 6 {
+            if checkDebugging() {
+                return
+            }
+            subCheck(7)
+        } else if typeSecurity == 7 {
             NotificationCenter.default.addObserver(self, selector: #selector(screenDidConnect), name: UIScreen.didConnectNotification, object: nil)
             NotificationCenter.default.addObserver(self, selector: #selector(screenDidDisconnect), name: UIScreen.didDisconnectNotification, object: nil)
             if checkScreenCasting() {
                 return
             }
-            subCheck(7)
-        } else if typeSecurity == 7 {
-            if checkScreenOverlay() {
-                return
-            }
             subCheck(8)
         } else if typeSecurity == 8 {
-            if checkCallForward() {
+            if checkScreenOverlay() {
                 return
             }
             subCheck(9)
         } else if typeSecurity == 9 {
-            if checkMultipleLogin() {
+            if checkCallForward() {
                 return
             }
             subCheck(10)
         } else if typeSecurity == 10 {
-            if checkSimSwap() {
+            if checkMultipleLogin() {
                 return
             }
             subCheck(11)
         } else if typeSecurity == 11 {
-            if checkGeovelocity() {
+            if checkSimSwap() {
                 return
             }
             subCheck(12)
         } else if typeSecurity == 12 {
-            if checkBehaviourAnalysis() {
+            if checkGeovelocity() {
                 return
             }
             subCheck(13)
+        } else if typeSecurity == 13 {
+            if checkBehaviourAnalysis() {
+                return
+            }
         }
     }
     
@@ -349,7 +360,9 @@ private class Process: NSObject {
             DispatchQueue.main.async(execute: {
                 let alert = SSLibAlertController(title: Preference.getCheckEmulatorAlertTitle(), message: Preference.getCheckEmulatorAlertMessage(), preferredStyle: .alert)
                 if Preference.getCheckEmulatorAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE {
-                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: nil))
+                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in
+                        subCheck(2)
+                    }))
                     if UIApplication.shared.visibleViewController?.navigationController != nil {
                         UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
                     } else {
@@ -376,7 +389,9 @@ private class Process: NSObject {
             DispatchQueue.main.async(execute: {
                 let alert = SSLibAlertController(title: Preference.getCheckRootedAlertTitle(), message: Preference.getCheckRootedAlertMessage(), preferredStyle: .alert)
                 if Preference.getCheckRootedAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE {
-                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: nil))
+                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in
+                        subCheck(3)
+                    }))
                     if UIApplication.shared.visibleViewController?.navigationController != nil {
                         UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
                     } else {
@@ -410,7 +425,9 @@ private class Process: NSObject {
                     DispatchQueue.main.async(execute: {
                         let alert = SSLibAlertController(title: Preference.getCheckRootedAlertTitle(), message: Preference.getCheckRootedAlertMessage(), preferredStyle: .alert)
                         if Preference.getCheckOutdatedOsAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE {
-                            alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: nil))
+                            alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in
+                                subCheck(4)
+                            }))
                             if UIApplication.shared.visibleViewController?.navigationController != nil {
                                 UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
                             } else {
@@ -440,7 +457,38 @@ private class Process: NSObject {
             DispatchQueue.main.async(execute: {
                 let alert = SSLibAlertController(title: Preference.getCheckTemperingAlertTitle(), message: Preference.getCheckTemperingAlertMessage(), preferredStyle: .alert)
                 if Preference.getCheckTemperingAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE {
-                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: nil))
+                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in
+                        subCheck(5)
+                    }))
+                    if UIApplication.shared.visibleViewController?.navigationController != nil {
+                        UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
+                    } else {
+                        UIApplication.shared.visibleViewController?.present(alert, animated: true, completion: nil)
+                    }
+                } else {
+                    alert.addAction(UIAlertAction(title: "Exit", style: UIAlertAction.Style.default, handler: {_ in
+                        exit(-141)
+                    }))
+                    if UIApplication.shared.visibleViewController?.navigationController != nil {
+                        UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
+                    } else {
+                        UIApplication.shared.visibleViewController?.present(alert, animated: true, completion: nil)
+                    }
+                }
+            })
+            return true
+        }
+        return false
+    }
+    
+    static func checkHooked() -> Bool {
+        if Preference.getCheckHooked() && isHooked() {
+            DispatchQueue.main.async(execute: {
+                let alert = SSLibAlertController(title: Preference.getCheckHookedAlertTitle(), message: Preference.getCheckHookedAlertMessage(), preferredStyle: .alert)
+                if Preference.getCheckHookedAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE {
+                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in
+                        subCheck(6)
+                    }))
                     if UIApplication.shared.visibleViewController?.navigationController != nil {
                         UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
                     } else {
@@ -467,7 +515,9 @@ private class Process: NSObject {
             DispatchQueue.main.async(execute: {
                 let alert = SSLibAlertController(title: Preference.getCheckDebuggingAlertTitle(), message: Preference.getCheckDebuggingAlertMessage(), preferredStyle: .alert)
                 if Preference.getCheckDebuggingAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE {
-                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: nil))
+                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in
+                        subCheck(7)
+                    }))
                     if UIApplication.shared.visibleViewController?.navigationController != nil {
                         UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
                     } else {
@@ -494,7 +544,9 @@ private class Process: NSObject {
             DispatchQueue.main.async(execute: {
                 let alert = SSLibAlertController(title: Preference.getCheckScreenCastingAlertTitle(), message: Preference.getCheckScreenCastingAlertMessage(), preferredStyle: .alert)
                 if Preference.getCheckScreenCastingAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE {
-                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: nil))
+                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in
+                        subCheck(8)
+                    }))
                     if UIApplication.shared.visibleViewController?.navigationController != nil {
                         UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
                     } else {
@@ -521,7 +573,9 @@ private class Process: NSObject {
             DispatchQueue.main.async(execute: {
                 let alert = SSLibAlertController(title: Preference.getCheckScreenOverlayAlertTitle(), message: Preference.getCheckScreenOverlayAlertMessage(), preferredStyle: .alert)
                 if Preference.getCheckScreenOverlayAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE {
-                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: nil))
+                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in
+                        subCheck(9)
+                    }))
                     if UIApplication.shared.visibleViewController?.navigationController != nil {
                         UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
                     } else {
@@ -548,7 +602,9 @@ private class Process: NSObject {
             DispatchQueue.main.async(execute: {
                 let alert = SSLibAlertController(title: Preference.getCheckCallForwardAlertTitle(), message: Preference.getCheckCallForwardAlertMessage(), preferredStyle: .alert)
                 if Preference.getCheckCallForwardAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE {
-                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: nil))
+                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in
+                        subCheck(10)
+                    }))
                     if UIApplication.shared.visibleViewController?.navigationController != nil {
                         UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
                     } else {
@@ -575,7 +631,9 @@ private class Process: NSObject {
             DispatchQueue.main.async(execute: {
                 let alert = SSLibAlertController(title: Preference.getCheckMultipleLoginAlertTitle(), message: Preference.getCheckMultipleLoginAlertMessage(), preferredStyle: .alert)
                 if Preference.getCheckMultipleLoginAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE {
-                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: nil))
+                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in
+                        subCheck(11)
+                    }))
                     if UIApplication.shared.visibleViewController?.navigationController != nil {
                         UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
                     } else {
@@ -602,7 +660,9 @@ private class Process: NSObject {
             DispatchQueue.main.async(execute: {
                 let alert = SSLibAlertController(title: Preference.getCheckSimSwapAlertTitle(), message: Preference.getCheckSimSwapAlertMessage(), preferredStyle: .alert)
                 if Preference.getCheckSimSwapAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE {
-                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: nil))
+                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in
+                        subCheck(12)
+                    }))
                     if UIApplication.shared.visibleViewController?.navigationController != nil {
                         UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
                     } else {
@@ -629,7 +689,9 @@ private class Process: NSObject {
             DispatchQueue.main.async(execute: {
                 let alert = SSLibAlertController(title: Preference.getCheckGeoVelocityAlertTitle(), message: Preference.getCheckGeoVelocityAlertMessage(), preferredStyle: .alert)
                 if Preference.getCheckGeoVelocityAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE {
-                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: nil))
+                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in
+                        subCheck(13)
+                    }))
                     if UIApplication.shared.visibleViewController?.navigationController != nil {
                         UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
                     } else {
@@ -656,7 +718,9 @@ private class Process: NSObject {
             DispatchQueue.main.async(execute: {
                 let alert = SSLibAlertController(title: Preference.getCheckBehaviourAnalysisAlertTitle(), message: Preference.getCheckBehaviourAnalysisAlertMessage(), preferredStyle: .alert)
                 if Preference.getCheckBehaviourAnalysisAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE {
-                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: nil))
+                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in
+                        subCheck(14)
+                    }))
                     if UIApplication.shared.visibleViewController?.navigationController != nil {
                         UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
                     } else {
@@ -708,10 +772,6 @@ private class Process: NSObject {
             fileManager.fileExists(atPath: "/etc/apt") ||
             fileManager.fileExists(atPath: "/private/var/lib/apt/") ||
             fileManager.fileExists(atPath: "/Applications/FakeApp.app") {
-            return true
-        }
-        let filePath = "/private/var/mobile/Library/Preferences/com.apple.springboard.plist"
-        if FileManager.default.fileExists(atPath: filePath) {
             return true
         }
         
@@ -927,6 +987,9 @@ private class Preference {
     
     static func getKeyloggerAlertTitle() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_KEYLOGGER_ALERT_TITLE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_screenshare_title
+            }
             return value
         }
         return PreferencesKey.ss_screenshare_title
@@ -937,6 +1000,9 @@ private class Preference {
     
     static func getKeyloggerAlertMessage() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_KEYLOGGER_ALERT_MESSAGE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_screenshare_warning
+            }
             return value
         }
         return PreferencesKey.ss_screenshare_warning
@@ -970,6 +1036,9 @@ private class Preference {
     
     static func getCheckScreenCaptureAlertTitle() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_SCREEN_CAPTURE_ALERT_TITLE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_screenshare_title
+            }
             return value
         }
         return PreferencesKey.ss_screenshare_title
@@ -980,6 +1049,9 @@ private class Preference {
     
     static func getScreenCaptureAlertMessage() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_SCREEN_CAPTURE_ALERT_MESSAGE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_screenshare_warning
+            }
             return value
         }
         return PreferencesKey.ss_screenshare_warning
@@ -1013,6 +1085,9 @@ private class Preference {
     
     static func getCheckEmulatorAlertTitle() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_EMULATOR_ALERT_TITLE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_emulator_title
+            }
             return value
         }
         return PreferencesKey.ss_emulator_title
@@ -1023,6 +1098,9 @@ private class Preference {
     
     static func getCheckEmulatorAlertMessage() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_EMULATOR_ALERT_MESSAGE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_emulator_continue
+            }
             return value
         }
         return PreferencesKey.ss_emulator_continue
@@ -1057,6 +1135,9 @@ private class Preference {
     
     static func getCheckRootedAlertTitle() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_ROOTED_ALERT_TITLE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_rooted_title
+            }
             return value
         }
         return PreferencesKey.ss_rooted_title
@@ -1067,6 +1148,9 @@ private class Preference {
     
     static func getCheckRootedAlertMessage() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_ROOTED_ALERT_MESSAGE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_rooted_warning
+            }
             return value
         }
         return PreferencesKey.ss_rooted_warning
@@ -1101,6 +1185,9 @@ private class Preference {
     
     static func getCheckOutdatedOsAlertTitle() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_OUTDATED_OS_ALERT_TITLE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_os_not_supported_title
+            }
             return value
         }
         return PreferencesKey.ss_os_not_supported_title
@@ -1111,6 +1198,9 @@ private class Preference {
     
     static func getCheckOutdatedOsAlertMessage() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_OUTDATED_OS_ALERT_MESSAGE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_os_not_supported_continue
+            }
             return value
         }
         return PreferencesKey.ss_os_not_supported_continue
@@ -1155,6 +1245,9 @@ private class Preference {
     
     static func getCheckTemperingAlertTitle() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_TEMPERING_ALERT_TITLE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_tempering_title
+            }
             return value
         }
         return PreferencesKey.ss_tempering_title
@@ -1165,6 +1258,9 @@ private class Preference {
     
     static func getCheckTemperingAlertMessage() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_TEMPERING_ALERT_MESSAGE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_tempering_warning
+            }
             return value
         }
         return PreferencesKey.ss_tempering_warning
@@ -1199,6 +1295,9 @@ private class Preference {
     
     static func getCheckDebuggingAlertTitle() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_DEBUGGING_ALERT_TITLE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_debugging_title
+            }
             return value
         }
         return PreferencesKey.ss_debugging_title
@@ -1209,6 +1308,9 @@ private class Preference {
     
     static func getCheckDebuggingAlertMessage() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_DEBUGGING_ALERT_MESSAGE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_debugging_warning
+            }
             return value
         }
         return PreferencesKey.ss_debugging_warning
@@ -1243,6 +1345,9 @@ private class Preference {
     
     static func getCheckScreenCastingAlertTitle() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_SCREEN_CASTING_ALERT_TITLE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_debugging_title
+            }
             return value
         }
         return PreferencesKey.ss_debugging_title
@@ -1253,6 +1358,9 @@ private class Preference {
     
     static func getCheckScreenCastingAlertMessage() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_SCREEN_CASTING_ALERT_MESSAGE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_debugging_warning
+            }
             return value
         }
         return PreferencesKey.ss_debugging_warning
@@ -1287,6 +1395,9 @@ private class Preference {
     
     static func getCheckScreenOverlayAlertTitle() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_SCREEN_OVERLAY_ALERT_TITLE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_screenoverlay_title
+            }
             return value
         }
         return PreferencesKey.ss_screenoverlay_title
@@ -1297,6 +1408,9 @@ private class Preference {
     
     static func getCheckScreenOverlayAlertMessage() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_SCREEN_OVERLAY_ALERT_MESSAGE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_screenoverlay_continue
+            }
             return value
         }
         return PreferencesKey.ss_screenoverlay_continue
@@ -1331,6 +1445,9 @@ private class Preference {
     
     static func getCheckCallForwardAlertTitle() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_CALL_FORWARD_ALERT_TITLE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_callforward_title
+            }
             return value
         }
         return PreferencesKey.ss_callforward_title
@@ -1341,6 +1458,9 @@ private class Preference {
     
     static func getCheckCallForwardAlertMessage() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_CALL_FORWARD_ALERT_MESSAGE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_callforward_continue
+            }
             return value
         }
         return PreferencesKey.ss_callforward_continue
@@ -1375,6 +1495,9 @@ private class Preference {
     
     static func getCheckMultipleLoginAlertTitle() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_MULTIPLE_LOGIN_ALERT_TITLE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_multiple_login_title
+            }
             return value
         }
         return PreferencesKey.ss_multiple_login_title
@@ -1385,6 +1508,9 @@ private class Preference {
     
     static func getCheckMultipleLoginAlertMessage() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_MULTIPLE_LOGIN_ALERT_MESSAGE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_multiple_login_warning
+            }
             return value
         }
         return PreferencesKey.ss_multiple_login_warning
@@ -1419,6 +1545,9 @@ private class Preference {
     
     static func getCheckSimSwapAlertTitle() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_SIM_SWAP_ALERT_TITLE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_simswap_title
+            }
             return value
         }
         return PreferencesKey.ss_simswap_title
@@ -1429,6 +1558,9 @@ private class Preference {
     
     static func getCheckSimSwapAlertMessage() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_SIM_SWAP_ALERT_MESSAGE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_simswap_warning
+            }
             return value
         }
         return PreferencesKey.ss_simswap_warning
@@ -1463,6 +1595,9 @@ private class Preference {
     
     static func getCheckGeoVelocityAlertTitle() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_GEO_VELOCITY_ALERT_TITLE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_geo_velocity_title
+            }
             return value
         }
         return PreferencesKey.ss_geo_velocity_title
@@ -1473,6 +1608,9 @@ private class Preference {
     
     static func getCheckGeoVelocityAlertMessage() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_GEO_VELOCITY_ALERT_MESSAGE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_geo_velocity_warning
+            }
             return value
         }
         return PreferencesKey.ss_geo_velocity_warning
@@ -1507,6 +1645,9 @@ private class Preference {
     
     static func getCheckBehaviourAnalysisAlertTitle() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_BEHAVIOUR_ANALYSIS_ALERT_TITLE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_behaviour_anomaly_title
+            }
             return value
         }
         return PreferencesKey.ss_behaviour_anomaly_title
@@ -1517,9 +1658,62 @@ private class Preference {
     
     static func getCheckBehaviourAnalysisAlertMessage() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_BEHAVIOUR_ANALYSIS_ALERT_MESSAGE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_behaviour_anomaly_warning
+            }
             return value
         }
         return PreferencesKey.ss_behaviour_anomaly_warning
+    }
+    
+    /**
+     * Hooked Detection
+     */
+    static func setCheckHooked(value: Bool){
+        SecureUserDefaultsSS.shared.set(value, forKey: PreferencesKey.SS_CHECK_HOOKED)
+    }
+    
+    static func getCheckHooked() -> Bool {
+        if let value: Bool = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_HOOKED) {
+            return value
+        }
+        return false
+    }
+    static func setCheckHookedAction(value: String){
+        SecureUserDefaultsSS.shared.set(value, forKey: PreferencesKey.SS_CHECK_HOOKED_ACTION)
+    }
+    
+    static func getCheckHookedAction() -> String {
+        if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_HOOKED_ACTION) {
+            return value
+        }
+        return "0"
+    }
+    static func setCheckHookedAlertTitle(value: String){
+        SecureUserDefaultsSS.shared.set(value, forKey: PreferencesKey.SS_CHECK_HOOKED_ALERT_TITLE)
+    }
+    
+    static func getCheckHookedAlertTitle() -> String {
+        if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_HOOKED_ALERT_TITLE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_hooked_title
+            }
+            return value
+        }
+        return PreferencesKey.ss_hooked_title
+    }
+    static func setCheckHookedAlertMessage(value: String){
+        SecureUserDefaultsSS.shared.set(value, forKey: PreferencesKey.SS_CHECK_HOOKED_ALERT_MESSAGE)
+    }
+    
+    static func getCheckHookedAlertMessage() -> String {
+        if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_HOOKED_ALERT_MESSAGE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_hooked_warning
+            }
+            return value
+        }
+        return PreferencesKey.ss_hooked_warning
     }
 }
 
@@ -1640,10 +1834,17 @@ private class PreferencesKey {
     static let SS_CHECK_BEHAVIOUR_ANALYSIS_ALERT_MESSAGE = "ss_check_behaviour_analysis_alert_message"
     static let ss_behaviour_anomaly_title = "Behaviour Anomaly Detected!"
     static let ss_behaviour_anomaly_warning = "We have identified a significant anomaly in the behavior of your device. This notification serves as a precautionary measure, as unusual patterns can indicate potential security threats, unauthorized access, or software malfunctions that could compromise your data and overall device performance."
+    
+    static let SS_CHECK_HOOKED = "ss_check_hooked"
+    static let SS_CHECK_HOOKED_ACTION = "ss_check_hooked_action"
+    static let SS_CHECK_HOOKED_ALERT_TITLE = "ss_check_hooked_alert_title"
+    static let SS_CHECK_HOOKED_ALERT_MESSAGE = "ss_check_hooked_alert_message"
+    static let ss_hooked_title = "Hooked Detected!"
+    static let ss_hooked_warning = "Our security shield has detected changes in the application that may indicate Hook or Anti Frida, which could potentially lead to malware infection, data manipulation, and other risks. Please remove this apps and download from official App Store."
 }
 
 private class SelfSignedURLSessionDelegate: NSObject, URLSessionTaskDelegate, URLSessionDataDelegate {
-    public func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+    func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
         if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust {
             if let serverTrust = challenge.protectionSpace.serverTrust {
                 let credential = URLCredential(trust: serverTrust)
@@ -1678,7 +1879,7 @@ private class Utils {
         icIGNORE.insert(32)// <space>
     }
     
-    public static func decrypt(str: String) -> String {
+    private static func decrypt(str: String) -> String {
         var arr: [Character]
         var iRandom = 0
         var sDecrypt: String
@@ -1766,7 +1967,7 @@ private class Utils {
 }
 
 extension String {
-    public func substring(from: Int?, to: Int?) -> String {
+    func substring(from: Int?, to: Int?) -> String {
         if let start = from {
             guard start < self.count else {
                 return ""
@@ -1804,15 +2005,15 @@ extension String {
 }
 
 extension UIColor {
-    public static var mainColorSS: UIColor {
+    static var mainColorSS: UIColor {
         return renderColor(hex: "#046cfc")
     }
     
-    public static var blackDarkModeSS: UIColor {
+    static var blackDarkModeSS: UIColor {
         return renderColor(hex: "#262626")
     }
     
-    public class func renderColor(hex: String) -> UIColor {
+    private class func renderColor(hex: String) -> UIColor {
         var cString:String = hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
 
         if (cString.hasPrefix("#")) {
@@ -1836,7 +2037,7 @@ extension UIColor {
 }
 
 extension UIApplication {
-    public static var appVersion: String? {
+    static var appVersion: String? {
         return Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
     }
     
@@ -1844,7 +2045,7 @@ extension UIApplication {
         return UIApplication.shared.windows.filter {$0.isKeyWindow}.first?.rootViewController
     }
     
-    public var visibleViewController: UIViewController? {
+    var visibleViewController: UIViewController? {
         let keyWindow = UIApplication.shared.windows.filter {$0.isKeyWindow}.first
         if var topController = keyWindow?.rootViewController {
             while let presentedViewController = topController.presentedViewController {
@@ -1870,14 +2071,14 @@ extension UIImage {
     }
 }
 
-public class TMessageSS {
-    public var mType: String = ""
-    public var mVersion: String = ""
-    public var mCode: String = ""
-    public var mStatus: String = ""
-    public var mPIN: String = ""
-    public var mL_PIN: String = ""
-    public var mBodies: [String: String] = [String: String]()
+private class TMessageSS {
+    var mType: String = ""
+    var mVersion: String = ""
+    var mCode: String = ""
+    var mStatus: String = ""
+    var mPIN: String = ""
+    var mL_PIN: String = ""
+    var mBodies: [String: String] = [String: String]()
     private var mMedia:[UInt8] = [UInt8]()
     
     let C_HEADER:UnicodeScalar = UnicodeScalar(0x01)
@@ -1891,9 +2092,9 @@ public class TMessageSS {
     var S_ARRAY: String = ""
     
     
-    public static let TYPE_SQLITE_ONLY =  "1"
-    public static let TYPE_ALL         =  "2"
-    public static let TYPE_NEED_ACK    =  "3"
+    static let TYPE_SQLITE_ONLY =  "1"
+    static let TYPE_ALL         =  "2"
+    static let TYPE_NEED_ACK    =  "3"
     
     let ERRCOD = "A97"
     let MEDIA_LENGTH = "ML"
@@ -1908,13 +2109,13 @@ public class TMessageSS {
         return me
     }
     
-    public init() {
+    init() {
         mVersion = "1.0.111"
         mBodies[IMEI] = getCLMUserId()
         mBodies[VERCOD] = "2.2.177"
     }
     
-    public init(data : String) {
+    init(data : String) {
         _ = unpack(data: data)
     }
     
@@ -1931,7 +2132,7 @@ public class TMessageSS {
         mBodies[VERCOD] = "2.2.177"
     }
     
-    public func clone(p_tmessage:TMessageSS) -> TMessageSS {
+    func clone(p_tmessage:TMessageSS) -> TMessageSS {
         return TMessageSS(
             type: p_tmessage.mType,
             version: p_tmessage.mVersion,
@@ -1944,30 +2145,30 @@ public class TMessageSS {
         )
     }
     
-    public func setMedia(media: [UInt8]) {
+    func setMedia(media: [UInt8]) {
         mMedia = media
         mBodies[MEDIA_LENGTH] = String(media.count)
     }
     
-    public func getCode() -> String {
+    func getCode() -> String {
         return mCode
     }
-    public func getStatus() -> String {
+    func getStatus() -> String {
         return mStatus
     }
-    public func getPIN() -> String {
+    func getPIN() -> String {
         return mPIN
     }
-    public func getType() -> String {
+    func getType() -> String {
         return mType
     }
-    public func getL_PIN() -> String {
+    func getL_PIN() -> String {
         return mL_PIN
     }
-    public func getMedia() -> [UInt8] {
+    func getMedia() -> [UInt8] {
         return mMedia
     }
-    public func getBody(key : String) -> String {
+    func getBody(key : String) -> String {
         if let data = mBodies[key] {
             return data
         }
@@ -1975,7 +2176,7 @@ public class TMessageSS {
             return ""
         }
     }
-    public func getBody(key : String, default_value: String) -> String {
+    func getBody(key : String, default_value: String) -> String {
         if ((mBodies[key] == nil)) {
             return default_value
         } else if mBodies[key] == "null" {
@@ -1985,7 +2186,7 @@ public class TMessageSS {
         }
     }
     
-    public func getBodyAsInteger(key : String, default_value: Int) -> Int {
+    func getBodyAsInteger(key : String, default_value: Int) -> Int {
         if ((mBodies[key] == nil)) {
             return default_value
         } else if mBodies[key] == "null" {
@@ -1994,7 +2195,7 @@ public class TMessageSS {
             return Int(mBodies[key]!)!
         }
     }
-    public func getBodyAsLong(key : String, default_value: CLong) -> CLong {
+    func getBodyAsLong(key : String, default_value: CLong) -> CLong {
         if let body = mBodies[key] {
             if (body == "null") {
                 return default_value
@@ -2010,7 +2211,7 @@ public class TMessageSS {
         }
     }
     
-    public func pack() -> String {
+    func pack() -> String {
         if (S_HEADER.isEmpty) { S_HEADER.append(Character(C_HEADER)) }
         
         var data = ""
@@ -2036,7 +2237,7 @@ public class TMessageSS {
     }
     
     
-    public func toBytes() -> [UInt8] {
+    func toBytes() -> [UInt8] {
         let data:String = pack()
         var result: [UInt8] = Array(data.utf8)
         if (!getMedia().isEmpty) {
@@ -2074,7 +2275,7 @@ public class TMessageSS {
         return [UInt8]()
     }
     
-    public func unpack(data: String) -> Bool {
+    func unpack(data: String) -> Bool {
         var result  = false
         if (S_HEADER.isEmpty) { S_HEADER.append(Character(C_HEADER)) }
         let headers = data.split(separator: Character(C_HEADER), maxSplits: 8, omittingEmptySubsequences: false)
@@ -2092,7 +2293,7 @@ public class TMessageSS {
         return result
     }
     
-    public func unpack(bytes_data: [UInt8]) -> Bool {
+    func unpack(bytes_data: [UInt8]) -> Bool {
         var result  = false
         let data = getData(bytes_data: bytes_data)
         let headers = data.split(separator: Character(C_HEADER), maxSplits: 8, omittingEmptySubsequences: false)
@@ -2166,7 +2367,7 @@ public class TMessageSS {
         return result
     }
     
-    public func toLogString() -> String {
+    func toLogString() -> String {
         var result = ""
         result += ("[" + mType + "]")
         result += ("[" + mVersion + "]")
@@ -2190,25 +2391,25 @@ public class TMessageSS {
         return result
     }
     
-    public func isOk() -> Bool {
+    func isOk() -> Bool {
         return getBody(key: ERRCOD, default_value: "99") == "00"
     }
 }
 
-public class CoreMessage_TMessageUtil {
+private class CoreMessage_TMessageUtil {
         
     private static var mTID = NSDate().timeIntervalSince1970 * 1000
     
-    public static func getTID() -> String {
+    static func getTID() -> String {
         mTID = Double(Int(mTID) + Int(1))
         return String(Int(mTID))
     }
     
-    public static func getString(json: Any, key: String) -> String {
+    static func getString(json: Any, key: String) -> String {
         return getString(json: json, key: key, def: "")
     }
     
-    public static func getString(json: Any, key: String, def: String) -> String {
+    static func getString(json: Any, key: String, def: String) -> String {
         if let dict = json as? [String: Any], let value = dict[key] as? String {
             if !value.isEmpty {
                 return value
@@ -2217,18 +2418,18 @@ public class CoreMessage_TMessageUtil {
         return def
     }
     
-    public static func getInt(json: Any, key: String, def: Int) -> Int {
+    static func getInt(json: Any, key: String, def: Int) -> Int {
         if let dict = json as? [String: Any], let value = dict[key] as? Int {
             return value
         }
         return def
     }
     
-    public static func getIntAsString(json: Any, key: String, def: Int) -> String {
+    static func getIntAsString(json: Any, key: String, def: Int) -> String {
         return String(getInt(json: json, key: key, def: def))
     }
     
-    public static func getLong(json: Any, key: String, def: CLong) -> CLong {
+    static func getLong(json: Any, key: String, def: CLong) -> CLong {
         if let dict = json as? [String: Any], let value = dict[key] as? CLong {
             return value
         }
@@ -2237,8 +2438,8 @@ public class CoreMessage_TMessageUtil {
     
 }
 
-public class SSLibAlertController: UIAlertController {
-    public override func viewWillAppear(_ animated: Bool) {
+private class SSLibAlertController: UIAlertController {
+    override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         
         // Customize the title's font
@@ -2261,7 +2462,7 @@ public class SSLibAlertController: UIAlertController {
     }
 }
 
-public class SecureUserDefaultsSS {
+private class SecureUserDefaultsSS {
     static let shared = SecureUserDefaultsSS()
     private let defaults: UserDefaults
     private let prefsKeyAlias = "_iosx_security_master_key_easysoft_"
