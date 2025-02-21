@@ -22,11 +22,112 @@ public class SecurityShield: NSObject {
     public static func check(appName: String, apiKey: String) {
         Preference.setAppId(value: appName)
         Preference.setAccount(value: apiKey)
-        pull()
+        DispatchQueue.global().async {
+            do {
+                if !API.bnuSDKServiceReady() || API.nGetCLXConnState() == 0 {
+                    let address = getAddressNew(apiKey:Preference.getAccount())
+                    if address.isEmpty {
+                        return
+                    }
+                    var id = Preference.getConnectionID()
+                    let addressConn = address.components(separatedBy: ":")[0]
+                    let port = Int(address.components(separatedBy: ":")[1]) ?? 0
+                    if id.isEmpty {
+                        let sDID = UIDevice.current.identifierForVendor?.uuidString ?? "UNK-DEVICE"
+                        id = String(sDID[sDID.index(sDID.endIndex, offsetBy: -5)...])
+                        Preference.setConnectionID(value: id)
+                    }
+                    try API.initConnection(sAPIK: apiKey, cbiI: CallBackSS(), sTCPAddr: addressConn, nTCPPort: port, sUserID: id, sStartWH: "09:00")
+                    while (!API.bnuSDKServiceReady() || API.nGetCLXConnState() == 0) {
+                        Thread.sleep(forTimeInterval: 1)
+                    }
+                }
+                pull()
+            } catch {
+                
+            }
+        }
+    }
+    
+    private static func getAddressNew(apiKey: String) -> String {
+        var result = ""
+        let url = URL(string: "\(Preference.getDomainOpr())dipp/NuN1v3rs3/Qm3r4i0/get_ip_domain?account=\(apiKey)")!
+        let urlConfig = URLSessionConfiguration.default
+        let sessionDelegate = SelfSignedURLSessionDelegate()
+        urlConfig.requestCachePolicy = .returnCacheDataElseLoad
+        urlConfig.timeoutIntervalForRequest = 10.0
+        urlConfig.timeoutIntervalForResource = 10.0
+        let semaphore = DispatchSemaphore(value: 0)
+        let task = URLSession(configuration: urlConfig, delegate: sessionDelegate, delegateQueue: nil).dataTask(with: url) {(data, response, error) in
+            guard let data = data,
+                let url = response?.url,
+                let httpResponse = response as? HTTPURLResponse,
+                let fields = httpResponse.allHeaderFields as? [String: String] else {
+                semaphore.signal()
+                return
+            }
+            let dataEncode = String(data: data, encoding: .utf8)!
+            if !dataEncode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let dataDecodeBase64 = String(data: Data(base64Encoded: dataEncode)!, encoding: .utf8)!
+                let dataRealDecode = UtilsSS.decrypt(str: dataDecodeBase64)
+                do {
+                    if let jsonData = dataRealDecode.data(using: .utf8), let jsonObject = try JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: Any] {
+                        var newDomain = jsonObject["domain"] as! String
+                        let jsonAddress = jsonObject["address"] as! [[String: Any]]
+                        let newIp = jsonAddress[0]["ip"] as! String
+                        let newPort = jsonAddress[0]["portI"] as! String
+                        if newDomain.substring(from: newDomain.count-1, to: nil) != "/" {
+                            newDomain += "/"
+                        }
+                        if (newIp+":"+newPort) != Preference.getIpOpr() || newDomain != Preference.getDomainOpr() {
+                            //check new domain
+                            if checkNewDomain(newDomain) {
+                                Preference.setDomainOpr(value: newDomain)
+                                Preference.setIpPortOpr(value: (newIp+":"+newPort))
+                            }
+                        }
+                    }
+                } catch {
+                    
+                }
+            }
+            semaphore.signal()
+        }
+        task.resume()
+        _ = semaphore.wait(timeout: .distantFuture)
+        result = Preference.getIpOpr()
+        return result
+    }
+    
+    private static func checkNewDomain(_ newDomain: String) -> Bool {
+        var result = false
+        let url = URL(string: "\(newDomain)dipp/NuN1v3rs3/Qm3r4i0/get_ip_domain?account=\(Preference.getAccount())")!
+        let urlConfig = URLSessionConfiguration.default
+        let sessionDelegate = SelfSignedURLSessionDelegate()
+        urlConfig.requestCachePolicy = .returnCacheDataElseLoad
+        urlConfig.timeoutIntervalForRequest = 10.0
+        urlConfig.timeoutIntervalForResource = 10.0
+        let semaphore = DispatchSemaphore(value: 0)
+        let task = URLSession(configuration: urlConfig, delegate: sessionDelegate, delegateQueue: nil).dataTask(with: url) {(data, response, error) in
+            if let httpResponse = response as? HTTPURLResponse {
+                if httpResponse.statusCode == 200 {
+                    guard let url = response?.url,
+                        let fields = httpResponse.allHeaderFields as? [String: String] else {
+                        semaphore.signal()
+                        return
+                    }
+                    result = true
+                }
+            }
+            semaphore.signal()
+        }
+        task.resume()
+        _ = semaphore.wait(timeout: .distantFuture)
+        return result
     }
     
     private static func pull() {
-        let me: String! = SecureUserDefaultsSS.shared.value(forKey: "me")!
+        let me: String! = SecureUserDefaultsSS.shared.value(forKey: "me") ?? Preference.getConnectionID()
         let tmessage = TMessageSS()
         tmessage.mCode = "SS01"
         tmessage.mStatus = CoreMessage_TMessageUtil.getTID()
@@ -922,6 +1023,16 @@ private class Service {
 }
 
 private class Preference {
+    static func setConnectionID(value: String) {
+        SecureUserDefaultsSS.shared.set(value, forKey: PreferencesKey.SS_CONNECTION_ID)
+    }
+
+    static func getConnectionID() -> String {
+        if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CONNECTION_ID) {
+            return value
+        }
+        return ""
+    }
     static func getAppId() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_USER_APP_ID) {
             return value
@@ -944,11 +1055,19 @@ private class Preference {
         SecureUserDefaultsSS.shared.set(value, forKey: PreferencesKey.SS_USER_ACCOUNT)
     }
     
+    static func setDomainOpr(value: String){
+        SecureUserDefaultsSS.shared.set(value, forKey: PreferencesKey.SS_DOMAIN_OPR)
+    }
+    
     static func getDomainOpr() -> String {
         if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_DOMAIN_OPR) {
             return value
         }
         return "https://nexilis.io/"
+    }
+    
+    static func setIpPortOpr(value: String){
+        SecureUserDefaultsSS.shared.set(value, forKey: PreferencesKey.SS_IP_PORT_OPR)
     }
     
     static func getIpOpr() -> String {
@@ -1734,6 +1853,8 @@ private class PreferencesKey {
     static let ERR131 = "131:SIM Swap detected"
     static let ERR132 = "132:Behavioral Anomaly detected"
     
+    static let SS_CONNECTION_ID = "ss_connection_id"
+    
     static let SS_USER_APP_ID = "ss_user_app_id"
     static let SS_USER_ACCOUNT = "ss_user_account"
     static let SS_DOMAIN_OPR = "domain_opr"
@@ -1854,7 +1975,7 @@ private class SelfSignedURLSessionDelegate: NSObject, URLSessionTaskDelegate, UR
     }
 }
 
-private class Utils {
+private class UtilsSS {
     private static let I_BB = 48   // 0
     private static let I_BBT_1 = 57 // 9
     private static let I_BAT_1 = 65 // A
@@ -1879,7 +2000,7 @@ private class Utils {
         icIGNORE.insert(32)// <space>
     }
     
-    private static func decrypt(str: String) -> String {
+    public static func decrypt(str: String) -> String {
         var arr: [Character]
         var iRandom = 0
         var sDecrypt: String
@@ -2574,4 +2695,54 @@ private class SecureUserDefaultsSS {
     func sync() {
         defaults.synchronize()
     }
+}
+
+class CallBackSS : CallBack {
+    var sID: String = ""
+    
+    func connectionStateChanged(sUserID: String!, sDeviceID: String!, bConState: Bool!, nConType: Int!, nConSubType: Int!, nCLMConStat: UInt8!) {
+        
+    }
+    
+    func gpsStateChanged(nState: Int!) {
+        
+    }
+    
+    func sleepStateChanged(bState: Bool!) {
+        
+    }
+    
+    func callStateChanged(nState: Int!, sMessage: String!) -> Int {
+        return 1
+    }
+    
+    func bcastStateChanged(nState: Int!, sMessage: String!) -> Int {
+        return 1
+    }
+    
+    func sshareStateChanged(nState: Int!, sMessage: String!) -> Int {
+        return 1
+    }
+    
+    func incomingData(sPacketID: String!, oData: AnyObject!) throws {
+        
+    }
+    
+    func lateResponse(sPacketID: String!, sResponse: String!) throws {
+        
+    }
+    
+    func asycnACKReceived(sPacketID: String!) throws {
+        
+    }
+    
+    func locationUpdated(lTime: Int64!, sLocationInfo: String!) {
+        
+    }
+    
+    func resetDB() {
+        
+    }
+    
+    
 }
