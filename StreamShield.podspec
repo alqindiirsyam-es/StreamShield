@@ -22,7 +22,7 @@ Pod::Spec.new do |spec|
   spec.source_files = 'StreamShield/Source/**/*'
   spec.resource_bundles = { 'StreamShield' => ['StreamShield/Resource/**/*']}
   spec.swift_version = '5.5.1'
-  spec.dependency 'nuSDKService', '~> 4.0.5'
+  spec.dependency 'nuSDKService', '4.0.7'
   spec.ios.vendored_frameworks = "StreamShield.framework"
   spec.pod_target_xcconfig = { 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'arm64', 'ENABLE_BITCODE' => 'NO' }
   spec.user_target_xcconfig = { 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'arm64', 'ENABLE_BITCODE' => 'NO' }

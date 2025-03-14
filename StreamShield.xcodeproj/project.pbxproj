@@ -8,6 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		4CA3A8D13EA830BD06994857 /* Pods_StreamShield.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 97DA666C9445DC5537AF51DD /* Pods_StreamShield.framework */; };
+		CDFA683B2D841F8E00A13E90 /* SecurityShield.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDFA68362D841F8E00A13E90 /* SecurityShield.swift */; };
+		CDFA683C2D841F8E00A13E90 /* StreamShield.docc in Sources */ = {isa = PBXBuildFile; fileRef = CDFA68392D841F8E00A13E90 /* StreamShield.docc */; };
+		CDFA683D2D841F8E00A13E90 /* StreamShield.h in Headers */ = {isa = PBXBuildFile; fileRef = CDFA68382D841F8E00A13E90 /* StreamShield.h */; settings = {ATTRIBUTES = (Public, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -15,28 +18,10 @@
 		699A8C56FF5DC7FA59223CC2 /* Pods-StreamShield.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-StreamShield.debug.xcconfig"; path = "Target Support Files/Pods-StreamShield/Pods-StreamShield.debug.xcconfig"; sourceTree = "<group>"; };
 		97DA666C9445DC5537AF51DD /* Pods_StreamShield.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_StreamShield.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		CDB6D7EC2CD3553900615C4D /* StreamShield.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = StreamShield.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		CDFA68362D841F8E00A13E90 /* SecurityShield.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityShield.swift; sourceTree = "<group>"; };
+		CDFA68382D841F8E00A13E90 /* StreamShield.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = StreamShield.h; sourceTree = "<group>"; };
+		CDFA68392D841F8E00A13E90 /* StreamShield.docc */ = {isa = PBXFileReference; lastKnownFileType = folder.documentationcatalog; path = StreamShield.docc; sourceTree = "<group>"; };
 /* End PBXFileReference section */
-
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		CDB6D7F32CD3553900615C4D /* Exceptions for "StreamShield" folder in "StreamShield" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			publicHeaders = (
-				StreamShield.h,
-			);
-			target = CDB6D7EB2CD3553900615C4D /* StreamShield */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		CDB6D7EE2CD3553900615C4D /* StreamShield */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				CDB6D7F32CD3553900615C4D /* Exceptions for "StreamShield" folder in "StreamShield" target */,
-			);
-			path = StreamShield;
-			sourceTree = "<group>";
-		};
-/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		CDB6D7E92CD3553900615C4D /* Frameworks */ = {
@@ -70,7 +55,7 @@
 		CDB6D7E22CD3553900615C4D = {
 			isa = PBXGroup;
 			children = (
-				CDB6D7EE2CD3553900615C4D /* StreamShield */,
+				CDFA683A2D841F8E00A13E90 /* StreamShield */,
 				CDB6D7ED2CD3553900615C4D /* Products */,
 				4DE9A009F0C99904D2388707 /* Pods */,
 				407A271A712B5439E6100999 /* Frameworks */,
@@ -85,6 +70,24 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		CDFA68372D841F8E00A13E90 /* Source */ = {
+			isa = PBXGroup;
+			children = (
+				CDFA68362D841F8E00A13E90 /* SecurityShield.swift */,
+			);
+			path = Source;
+			sourceTree = "<group>";
+		};
+		CDFA683A2D841F8E00A13E90 /* StreamShield */ = {
+			isa = PBXGroup;
+			children = (
+				CDFA68372D841F8E00A13E90 /* Source */,
+				CDFA68382D841F8E00A13E90 /* StreamShield.h */,
+				CDFA68392D841F8E00A13E90 /* StreamShield.docc */,
+			);
+			path = StreamShield;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXHeadersBuildPhase section */
@@ -92,6 +95,7 @@
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CDFA683D2D841F8E00A13E90 /* StreamShield.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -111,9 +115,6 @@
 			buildRules = (
 			);
 			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				CDB6D7EE2CD3553900615C4D /* StreamShield */,
 			);
 			name = StreamShield;
 			productName = StreamShield;
@@ -193,6 +194,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CDFA683B2D841F8E00A13E90 /* SecurityShield.swift in Sources */,
+				CDFA683C2D841F8E00A13E90 /* StreamShield.docc in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
