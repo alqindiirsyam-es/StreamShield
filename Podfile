@@ -6,6 +6,6 @@ target 'StreamShield' do
   use_frameworks!
 
   # Pods for StreamShield
-  pod 'nuSDKService', '~> 4.0.21'
+  pod 'nuSDKService', '~> 4.0.22'
 
 end
