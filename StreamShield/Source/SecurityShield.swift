@@ -42,7 +42,7 @@ public class SecurityShield: NSObject {
                         Thread.sleep(forTimeInterval: 1)
                     }
                 }
-                pull()
+//                pull()
             } catch {
                 
             }
