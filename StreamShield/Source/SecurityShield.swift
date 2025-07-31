@@ -14,6 +14,9 @@ import CoreTelephony
 import CryptoKit
 import MachO
 import CommonCrypto
+import SystemConfiguration.CaptiveNetwork
+import CoreLocation
+import Network
 
 public class SecurityShield: NSObject {
     
@@ -24,25 +27,25 @@ public class SecurityShield: NSObject {
         Preference.setAccount(value: apiKey)
         DispatchQueue.global().async {
             do {
+                var id = Preference.getConnectionID()
+                if id.isEmpty {
+                    let sDID = UIDevice.current.identifierForVendor?.uuidString ?? "UNK-DEVICE"
+                    id = String(sDID[sDID.index(sDID.endIndex, offsetBy: -5)...])
+                    Preference.setConnectionID(value: id)
+                }
                 if !API.bnuSDKServiceReady() || API.nGetCLXConnState() == 0 {
                     let address = getAddressNew(apiKey:Preference.getAccount())
                     if address.isEmpty {
                         return
                     }
-                    var id = Preference.getConnectionID()
                     let addressConn = address.components(separatedBy: ":")[0]
                     let port = Int(address.components(separatedBy: ":")[1]) ?? 0
-                    if id.isEmpty {
-                        let sDID = UIDevice.current.identifierForVendor?.uuidString ?? "UNK-DEVICE"
-                        id = String(sDID[sDID.index(sDID.endIndex, offsetBy: -5)...])
-                        Preference.setConnectionID(value: id)
-                    }
                     try API.initConnection(sAPIK: apiKey, cbiI: CallBackSS(), sTCPAddr: addressConn, nTCPPort: port, sUserID: id, sStartWH: "09:00")
                     while (!API.bnuSDKServiceReady() || API.nGetCLXConnState() == 0) {
                         Thread.sleep(forTimeInterval: 1)
                     }
                 }
-//                pull()
+                pull()
             } catch {
                 
             }
@@ -136,17 +139,71 @@ public class SecurityShield: NSObject {
         tmessage.mBodies["AAN"] = Preference.getAppId()
         tmessage.mBodies["type"] = "0"
         DispatchQueue.global().async{
-            if let response = Service.writeSync(message: tmessage) {
-                if response.isOk() {
-                    let dataResp = response.getBody(key: "A112")
-                    Process.check(dataSS: dataResp)
+            postDataWithCookiesAndUserAgent(from: URL(string: Preference.getDomainOpr() + "get_feature_access_new")!) { data, response, error in
+                let response = response as? HTTPURLResponse
+                if response?.statusCode != 200 || error != nil {
+                    return
+                }
+                if let data = data, let responseString = String(data: data, encoding: .utf8) {
+                    Process.check(dataSS: responseString)
                 } else {
                     Process.check(dataSS: "")
                 }
-            } else {
-                Process.check(dataSS: "")
             }
+//            if let response = Service.writeSync(message: tmessage) {
+//                if response.isOk() {
+//                    let dataResp = response.getBody(key: "A112")
+//                    Process.check(dataSS: dataResp)
+//                } else {
+//                    Process.check(dataSS: "")
+//                }
+//            } else {
+//                Process.check(dataSS: "")
+//            }
         }
+    }
+    
+    static func postDataWithCookiesAndUserAgent(from url: URL, parameter: [String: Any] = [:], parameters: [[String: Any]] = [], isFormData: Bool = false, completion: @escaping (Data?, URLResponse?, Error?) -> ()) {
+        let apiKey: String = Preference.getAccount()
+        let me: String? = SecureUserDefaultsSS.shared.value(forKey: "me")
+        var defaultParameter: [String : Any] = [
+            "app_id": Preference.getAppId(),
+            "apikey": apiKey,
+        ]
+        if me != nil {
+            defaultParameter["f_pin"] = me
+        }
+        var jsonArray: [[String: Any]] = []
+        if parameters.count == 0 {
+            jsonArray.append(defaultParameter)
+        } else {
+            jsonArray = parameters
+        }
+        var jsonData: Data!
+        if !isFormData {
+            jsonData = try? JSONSerialization.data(withJSONObject: parameter.count == 0 ? jsonArray : parameter, options: [])
+        } else {
+            let formData = parameter.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
+            jsonData = formData.data(using: .utf8)
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+//        request.setValue(Utils.getUserAgent(), forHTTPHeaderField: "User-Agent")
+//        request.setValue(Utils.getCookiesMobile(), forHTTPHeaderField: "Cookie")
+        if isFormData {
+            request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        } else {
+            request.setValue("application/json;charset=UTF-8", forHTTPHeaderField: "Content-Type")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+        }
+        request.httpBody = jsonData
+        let urlConfig = URLSessionConfiguration.default
+        urlConfig.timeoutIntervalForRequest = 30.0
+        urlConfig.timeoutIntervalForResource = 60.0
+        let sessionDelegate = SelfSignedURLSessionDelegate()
+        let session = URLSession(configuration: urlConfig, delegate: sessionDelegate, delegateQueue: nil)
+        let task = session.dataTask(with: request, completionHandler: completion)
+        task.resume()
     }
     
     private static func showToast(message : String, font: UIFont = UIFont.systemFont(ofSize: 12, weight: .medium), controller: UIViewController) {
@@ -195,7 +252,7 @@ public class SecurityShield: NSObject {
     }
 }
 
-private class Process: NSObject {
+private class Process: NSObject, CLLocationManagerDelegate {
     static func check(dataSS : String) {
         if !dataSS.isEmpty {
             if let jsonArray = try? JSONSerialization.jsonObject(with: dataSS.data(using: String.Encoding.utf8)!, options: JSONSerialization.ReadingOptions()) as? [AnyObject] {
@@ -300,7 +357,7 @@ private class Process: NSObject {
                         DispatchQueue.main.async(execute: {
                             let alert = SSLibAlertController(title: Preference.getPreventKeylogger() ? Preference.getKeyloggerAlertTitle() : Preference.getCheckScreenCaptureAlertTitle(), message: Preference.getPreventKeylogger() ? Preference.getKeyloggerAlertMessage() : Preference.getScreenCaptureAlertMessage(), preferredStyle: .alert)
                             if Preference.getPreventKeyloggerAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE || Preference.getPreventScreenCaptureAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE {
-                                alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in 
+                                alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in
                                     NotificationCenter.default.addObserver(self, selector: #selector(preventScreenRecording), name: UIScreen.capturedDidChangeNotification, object: nil)
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: {
                                         if let window = UIApplication.shared.windows.first {
@@ -386,34 +443,65 @@ private class Process: NSObject {
         field.leftViewMode = .always
     }
     
+    /*
+     * 1: Login from new device / multiple login detected
+     * 2: Call redirection
+     * 3: Sim change/swap
+     * 4: Rooted device
+     * 5: Emulator detected
+     * 6: Developer mode/debugger (USB/WiFi) detected
+     * 7: Screen recording/sharing/capture; keylogger
+     * 8: Malware & suspicious apps
+     * 9: App cloning
+     * 10: Remote wipe
+     * 11: Secure Folder
+     * 12: Outdated OS
+     * 13: Application Backup Detected
+     * 14: Checksum / Tempering
+     * 15: Screen Overlay
+     * 16: Sideload app
+     * 17: Behavioral Anomaly Detected
+     * 18: Magisk Detected
+     * 19: Rooted device by RootBeer
+     * 20: Google Play Integrity
+     * 21: Geovelocity
+     * 22: Hook/Anti Frida Detected
+     */
+    
     static func subCheck(_ typeSecurity : Int) {
         if typeSecurity == 1 {
             if checkEmulator() {
+                sendShieldErrorLog(code: 5)
                 return
             }
             subCheck(2)
         } else if typeSecurity == 2 {
             if checkRootedDevice() {
+                sendShieldErrorLog(code: 4)
                 return
             }
             subCheck(3)
         } else if typeSecurity == 3 {
             if checkOutdatedOS() {
+                sendShieldErrorLog(code: 12)
                 return
             }
             subCheck(4)
         } else if typeSecurity == 4 {
             if checkTempering() {
+                sendShieldErrorLog(code: 14)
                 return
             }
             subCheck(5)
         } else if typeSecurity == 5 {
             if checkHooked() {
+                sendShieldErrorLog(code: 22)
                 return
             }
             subCheck(6)
         } else if typeSecurity == 6 {
             if checkDebugging() {
+                sendShieldErrorLog(code: 6)
                 return
             }
             subCheck(7)
@@ -421,36 +509,43 @@ private class Process: NSObject {
             NotificationCenter.default.addObserver(self, selector: #selector(screenDidConnect), name: UIScreen.didConnectNotification, object: nil)
             NotificationCenter.default.addObserver(self, selector: #selector(screenDidDisconnect), name: UIScreen.didDisconnectNotification, object: nil)
             if checkScreenCasting() {
+                sendShieldErrorLog(code: 7)
                 return
             }
             subCheck(8)
         } else if typeSecurity == 8 {
             if checkScreenOverlay() {
+                sendShieldErrorLog(code: 15)
                 return
             }
             subCheck(9)
         } else if typeSecurity == 9 {
             if checkCallForward() {
+                sendShieldErrorLog(code: 2)
                 return
             }
             subCheck(10)
         } else if typeSecurity == 10 {
             if checkMultipleLogin() {
+                sendShieldErrorLog(code: 1)
                 return
             }
             subCheck(11)
         } else if typeSecurity == 11 {
             if checkSimSwap() {
+                sendShieldErrorLog(code: 3)
                 return
             }
             subCheck(12)
         } else if typeSecurity == 12 {
             if checkGeovelocity() {
+                sendShieldErrorLog(code: 21)
                 return
             }
             subCheck(13)
         } else if typeSecurity == 13 {
             if checkBehaviourAnalysis() {
+                sendShieldErrorLog(code: 17)
                 return
             }
         }
@@ -815,29 +910,8 @@ private class Process: NSObject {
     }
     
     static func checkBehaviourAnalysis() -> Bool {
-        if Preference.getCheckBehaviourAnalysis() && isSuspiciousBehavior() {
-            DispatchQueue.main.async(execute: {
-                let alert = SSLibAlertController(title: Preference.getCheckBehaviourAnalysisAlertTitle(), message: Preference.getCheckBehaviourAnalysisAlertMessage(), preferredStyle: .alert)
-                if Preference.getCheckBehaviourAnalysisAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE {
-                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in
-                        subCheck(14)
-                    }))
-                    if UIApplication.shared.visibleViewController?.navigationController != nil {
-                        UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
-                    } else {
-                        UIApplication.shared.visibleViewController?.present(alert, animated: true, completion: nil)
-                    }
-                } else {
-                    alert.addAction(UIAlertAction(title: "Exit", style: UIAlertAction.Style.default, handler: {_ in
-                        exit(-141)
-                    }))
-                    if UIApplication.shared.visibleViewController?.navigationController != nil {
-                        UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
-                    } else {
-                        UIApplication.shared.visibleViewController?.present(alert, animated: true, completion: nil)
-                    }
-                }
-            })
+        if Preference.getCheckBehaviourAnalysis() {
+            isSuspiciousBehavior()
             return true
         }
         return false
@@ -1003,13 +1077,359 @@ private class Process: NSObject {
         return false
     }
     
-    private static func isSuspiciousBehavior() -> Bool {
-        return false
+    private static func isSuspiciousBehavior() {
+        let data = collectDeviceAttributes()
+//        print("DATA COLLECT: \(data)")
+        DispatchQueue.global().async{
+            SecurityShield.postDataWithCookiesAndUserAgent(from: URL(string: Preference.getDomainOpr() + "data_capture")!, parameter: data) { data, response, error in
+                let response = response as? HTTPURLResponse
+                if response?.statusCode != 200 || error != nil {
+                    return
+                }
+                if let data = data, let responseString = String(data: data, encoding: .utf8) {
+                    if !responseString.isEmpty {
+//                        print("RESPON ANOMALI : \(responseString)")
+                        if responseString == "ANOMALY_DETECTED" {
+                            DispatchQueue.main.async(execute: {
+                                let alert = SSLibAlertController(title: Preference.getCheckBehaviourAnalysisAlertTitle(), message: Preference.getCheckBehaviourAnalysisAlertMessage(), preferredStyle: .alert)
+                                if Preference.getCheckBehaviourAnalysisAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE {
+                                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in
+                                        subCheck(14)
+                                    }))
+                                    if UIApplication.shared.visibleViewController?.navigationController != nil {
+                                        UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
+                                    } else {
+                                        UIApplication.shared.visibleViewController?.present(alert, animated: true, completion: nil)
+                                    }
+                                } else {
+                                    alert.addAction(UIAlertAction(title: "Exit", style: UIAlertAction.Style.default, handler: {_ in
+                                        exit(-141)
+                                    }))
+                                    if UIApplication.shared.visibleViewController?.navigationController != nil {
+                                        UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
+                                    } else {
+                                        UIApplication.shared.visibleViewController?.present(alert, animated: true, completion: nil)
+                                    }
+                                }
+                            })
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private static func sendShieldErrorLog(code: Int) {
+        var data = collectDeviceAttributes()
+        data["security_shield"] = "\(code)"
+        if let jsonData = try? JSONSerialization.data(withJSONObject: data, options: .prettyPrinted),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            let me: String! = SecureUserDefaultsSS.shared.value(forKey: "me") ?? ""
+            let tmessage = TMessageSS()
+            tmessage.mCode = "SSG"
+            tmessage.mStatus = CoreMessage_TMessageUtil.getTID()
+            tmessage.mPIN = me
+            tmessage.mBodies["A112"] = jsonString
+            _ = Service.write(message: tmessage)
+        }
+    }
+    
+    private static let vers = "5.0.52"
+    private var currentLocation: CLLocation?
+    private static func collectDeviceAttributes() -> [String: Any] {
+        var params: [String: Any] = [:]
+
+        // User and session
+        let me: String? = SecureUserDefaultsSS.shared.value(forKey: "me")
+        let sesId: String? = Preference.getConnectionID()
+        params["f_pin"] = me
+        params["session_id"] = sesId
+
+        // App info (replace with your preferences retrieval)
+        params["api"] = Preference.getAccount()
+        params["app_id"] = Preference.getAppId()
+        params["lib_version"] = vers
+        params["app_version"] = vers
+
+        // Network Info
+        let (netType, netTypeName) = getNetworkType()
+        let (operatorCode, operatorName) = getCarrierInfo()
+        let (wifiStatus, wifiIp, wifiSsid, wifiBssid) = getWifiInfo()
+        params["network_type"] = netType
+        params["network_type_name"] = netTypeName
+        params["network_operator"] = operatorCode
+        params["network_operator_name"] = operatorName
+        params["wifi_ssid"] = wifiSsid
+        params["wifi_bssid"] = wifiBssid
+        params["wifi_adapter"] = wifiStatus
+        params["wifi_ip"] = wifiIp
+        
+
+        // IP Address
+        params["ip_addressv4"] = getIPAddress(useIPv4: true)
+        params["ip_address"] = getIPAddress(useIPv4: false)
+
+        // GPS / location
+        let semaphore = DispatchSemaphore(value: 0)
+        
+        DispatchQueue.main.async {
+            LocationFetcher.shared.getCurrentLocation { coordinate in
+                var long = "0"
+                var lat = "0"
+                if let coord = coordinate {
+                    long = "\(coord.longitude)"
+                    lat = "\(coord.latitude)"
+                }
+//                print("Latitude: \(lat), Longitude: \(long)")
+                params["latitude"] = lat
+                params["longitude"] = long
+                semaphore.signal()
+            }
+        }
+        
+        _ = semaphore.wait(timeout: .now() + 10.0)
+
+        // iOS doesn't have an Android ID; use identifierForVendor
+        params["ios_identifier"] = UIDevice.current.identifierForVendor?.uuidString ?? ""
+
+        // Device attributes
+        let device = UIDevice.current
+        params["device_NAME"] = device.name
+        params["device_MODEL"] = device.model
+        params["device_SYSTEM_NAME"] = device.systemName
+        params["device_SYSTEM_VERSION"] = device.systemVersion
+        params["device_IDENTIFIER_FOR_VENDOR"] = device.identifierForVendor?.uuidString ?? ""
+
+        return getSimData(params: params)
+    }
+    
+    private static func getSimData(params: [String: Any] = [:]) -> [String: Any] {
+        var params = params
+        var simArray: [[String: Any]] = []
+
+        let networkInfo = CTTelephonyNetworkInfo()
+
+        if #available(iOS 12.0, *) {
+            if let carriers = networkInfo.serviceSubscriberCellularProviders {
+                for (key, carrier) in carriers {
+                    var simInfo: [String: Any] = [:]
+                    simInfo["carrier_name"] = carrier.carrierName ?? ""
+                    simInfo["mcc"] = carrier.mobileCountryCode ?? ""
+                    simInfo["mnc"] = carrier.mobileNetworkCode ?? ""
+                    simInfo["sim_slot"] = key // This is not a true "slot", but the key used internally
+                    simArray.append(simInfo)
+                }
+            }
+        } else {
+            if let carrier = networkInfo.subscriberCellularProvider {
+                var simInfo: [String: Any] = [:]
+                simInfo["carrier_name"] = carrier.carrierName ?? ""
+                simInfo["mcc"] = carrier.mobileCountryCode ?? ""
+                simInfo["mnc"] = carrier.mobileNetworkCode ?? ""
+                simInfo["sim_slot"] = "default"
+                simArray.append(simInfo)
+            }
+        }
+        params["sim_data"] = simArray
+
+        return params
+    }
+    
+    private static func getNetworkType() -> (type: String, name: String) {
+        let monitor = NWPathMonitor()
+        var networkType = ""
+        var networkTypeName = ""
+        
+        let semaphore = DispatchSemaphore(value: 0)
+        monitor.pathUpdateHandler = { path in
+            if path.usesInterfaceType(.wifi) {
+                networkType = "1" // Corresponds to TYPE_WIFI in Android
+                networkTypeName = "WIFI"
+            } else if path.usesInterfaceType(.cellular) {
+                networkType = "0" // Corresponds to TYPE_MOBILE
+                networkTypeName = "MOBILE"
+            } else {
+                networkType = "-1"
+                networkTypeName = "UNKNOWN"
+            }
+            semaphore.signal()
+            monitor.cancel()
+        }
+        let queue = DispatchQueue(label: "NetworkMonitor")
+        monitor.start(queue: queue)
+        semaphore.wait()
+        
+        return (networkType, networkTypeName)
+    }
+    
+    private static func getCarrierInfo() -> (operatorCode: String, operatorName: String) {
+        let networkInfo = CTTelephonyNetworkInfo()
+        
+        var carrierCode = ""
+        var carrierName = ""
+        
+        if #available(iOS 12.0, *) {
+            if let carriers = networkInfo.serviceSubscriberCellularProviders {
+                for (_, carrier) in carriers {
+                    carrierCode = (carrier.mobileCountryCode ?? "") + (carrier.mobileNetworkCode ?? "")
+                    carrierName = carrier.carrierName ?? ""
+                    break // Just use the first one
+                }
+            }
+        } else {
+            if let carrier = networkInfo.subscriberCellularProvider {
+                carrierCode = (carrier.mobileCountryCode ?? "") + (carrier.mobileNetworkCode ?? "")
+                carrierName = carrier.carrierName ?? ""
+            }
+        }
+        
+        return (carrierCode, carrierName)
+    }
+    
+    private static func getWifiInfo() -> (adapter: String, ip: String, ssid: String, bssid: String) {
+        var adapterStatus = "Off"
+        var ipAddress = ""
+        var ssid = ""
+        var bssid = ""
+        
+        // Get IP Address
+        if let interfaces = CNCopySupportedInterfaces() as NSArray? {
+            for interfaceName in interfaces {
+                if let unsafeInterfaceData = CNCopyCurrentNetworkInfo(interfaceName as! CFString) as NSDictionary? {
+                    ssid = unsafeInterfaceData["SSID"] as? String ?? ""
+                    bssid = unsafeInterfaceData["BSSID"] as? String ?? ""
+                    adapterStatus = "Connected"
+                    break
+                }
+            }
+        }
+        
+        if ssid.isEmpty {
+            adapterStatus = "Not Connected"
+        }
+
+        ipAddress = getWiFiIPAddress() ?? ""
+
+        return (adapterStatus, ipAddress, ssid, bssid)
+    }
+
+    private static func getWiFiIPAddress() -> String? {
+        var address: String?
+
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddr) == 0, let firstAddr = ifaddr else { return nil }
+
+        for ptr in sequence(first: firstAddr, next: { $0.pointee.ifa_next }) {
+            let interface = ptr.pointee
+            let addrFamily = interface.ifa_addr.pointee.sa_family
+
+            if addrFamily == UInt8(AF_INET) || addrFamily == UInt8(AF_INET6) {
+                let name = String(cString: interface.ifa_name)
+                if name == "en0" { // en0 is Wi-Fi
+                    var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                    getnameinfo(interface.ifa_addr, socklen_t(interface.ifa_addr.pointee.sa_len),
+                                &hostname, socklen_t(hostname.count),
+                                nil, socklen_t(0), NI_NUMERICHOST)
+                    address = String(cString: hostname)
+                    break
+                }
+            }
+        }
+
+        freeifaddrs(ifaddr)
+        return address
+    }
+    
+    private static func getIPAddress(useIPv4: Bool) -> String {
+        var address: String = ""
+
+        var ifaddr: UnsafeMutablePointer<ifaddrs>? = nil
+        if getifaddrs(&ifaddr) == 0, let firstAddr = ifaddr {
+            for ptr in sequence(first: firstAddr, next: { $0.pointee.ifa_next }) {
+                let interface = ptr.pointee
+                let addrFamily = interface.ifa_addr.pointee.sa_family
+
+                if addrFamily == UInt8(AF_INET) || addrFamily == UInt8(AF_INET6) {
+                    let name = String(cString: interface.ifa_name)
+                    if name == "en0" || name == "pdp_ip0" {
+                        var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                        let result = getnameinfo(
+                            interface.ifa_addr,
+                            socklen_t(interface.ifa_addr.pointee.sa_len),
+                            &hostname,
+                            socklen_t(hostname.count),
+                            nil,
+                            socklen_t(0),
+                            NI_NUMERICHOST
+                        )
+
+                        if result == 0 {
+                            let ip = String(cString: hostname)
+                            let isIPv4 = ip.contains(":") == false
+                            if useIPv4 && isIPv4 {
+                                address = ip
+                                break
+                            } else if !useIPv4 && !isIPv4 {
+                                // Remove IPv6 scope if present
+                                let cleanIPv6 = ip.split(separator: "%").first.map(String.init) ?? ip
+                                address = cleanIPv6.uppercased()
+                                break
+                            }
+                        }
+                    }
+                }
+            }
+            freeifaddrs(ifaddr)
+        }
+
+        return address
+    }
+}
+
+private class LocationFetcher: NSObject, CLLocationManagerDelegate {
+    static var shared = LocationFetcher()
+    private var manager: CLLocationManager?
+    private var completion: ((CLLocationCoordinate2D?) -> Void)?
+    
+    func getCurrentLocation(completion: @escaping (CLLocationCoordinate2D?) -> Void) {
+        self.completion = completion
+        self.manager = CLLocationManager()
+        self.manager?.delegate = self
+        self.manager?.desiredAccuracy = kCLLocationAccuracyBest
+        self.manager?.requestWhenInUseAuthorization()
+        
+        if CLLocationManager.locationServicesEnabled() {
+            self.manager?.requestLocation()
+        } else {
+            completion(nil)
+        }
+    }
+    
+    // MARK: - CLLocationManagerDelegate
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        completion?(locations.last?.coordinate)
+        cleanup()
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print("Error: \(error.localizedDescription)")
+        completion?(nil)
+        cleanup()
+    }
+    
+    private func cleanup() {
+        manager?.stopUpdatingLocation()
+        manager?.delegate = nil
+        manager = nil
+        completion = nil
     }
 }
 
 private class Service {
     static func writeSync(message: TMessageSS, timeout: Int = 15 * 1000) -> TMessageSS? {
+        if !API.bInetConnAvailable() || API.nGetCLXConnState() == 0 {
+            return nil
+        }
         do {
             if let data = try API.sGetResponse(sRequest: message.pack(), lTimeout: timeout, bKeepTOResp: true) {
                 let response = TMessageSS(data: data)
@@ -1017,6 +1437,29 @@ private class Service {
             }
         } catch {
             print(error)
+        }
+        return nil
+    }
+    
+    static func write(message: TMessageSS, timeout: Int = 15 * 1000) -> String? {
+        do {
+            if !API.bInetConnAvailable() || API.nGetCLXConnState() == 0 {
+                return nil
+            }
+            //print(">> SENDING MESSAGE >> ", message.toLogString())
+            if message.getMedia().count == 0 {
+                if let data = try API.sSend(sData: message.pack(), nPriority: 1, lTimeout: timeout) {
+                    //print("<< RESPONSE MESSAGE << ", data)
+                    return data
+                }
+            }
+            // media
+            if let data = try API.sSend(abData: message.toBytes(), nPriority: 2, lTimeout: timeout) {
+                //print("<< RESPONSE MESSAGE << ", data)
+                return data
+            }
+        } catch {
+            //print(error)
         }
         return nil
     }
