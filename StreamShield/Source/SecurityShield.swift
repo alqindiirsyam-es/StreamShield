@@ -354,31 +354,10 @@ private class Process: NSObject, CLLocationManagerDelegate {
                         
                     }
                     if Preference.getPreventKeylogger() || Preference.getPreventScreenCapture() {
-                        DispatchQueue.main.async(execute: {
-                            let alert = SSLibAlertController(title: Preference.getPreventKeylogger() ? Preference.getKeyloggerAlertTitle() : Preference.getCheckScreenCaptureAlertTitle(), message: Preference.getPreventKeylogger() ? Preference.getKeyloggerAlertMessage() : Preference.getScreenCaptureAlertMessage(), preferredStyle: .alert)
-                            if Preference.getPreventKeyloggerAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE || Preference.getPreventScreenCaptureAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE {
-                                alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in
-                                    NotificationCenter.default.addObserver(self, selector: #selector(preventScreenRecording), name: UIScreen.capturedDidChangeNotification, object: nil)
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: {
-                                        if let window = UIApplication.shared.windows.first {
-                                            makeSecure(window: window)
-                                        }
-                                    })
-                                }))
-                                if UIApplication.shared.visibleViewController?.navigationController != nil {
-                                    UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
-                                } else {
-                                    UIApplication.shared.visibleViewController?.present(alert, animated: true, completion: nil)
-                                }
-                            } else {
-                                alert.addAction(UIAlertAction(title: "Exit", style: UIAlertAction.Style.default, handler: {_ in
-                                    exit(-101)
-                                }))
-                                if UIApplication.shared.visibleViewController?.navigationController != nil {
-                                    UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
-                                } else {
-                                    UIApplication.shared.visibleViewController?.present(alert, animated: true, completion: nil)
-                                }
+                        NotificationCenter.default.addObserver(self, selector: #selector(preventScreenRecording), name: UIScreen.capturedDidChangeNotification, object: nil)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: {
+                            if let window = UIApplication.shared.windows.first {
+                                makeSecure(window: window)
                             }
                         })
                     } else {
@@ -471,36 +450,42 @@ private class Process: NSObject, CLLocationManagerDelegate {
     static func subCheck(_ typeSecurity : Int) {
         if typeSecurity == 1 {
             if checkEmulator() {
+//                print("ERROR 1")
                 sendShieldErrorLog(code: 5)
                 return
             }
             subCheck(2)
         } else if typeSecurity == 2 {
             if checkRootedDevice() {
+//                print("ERROR 2")
                 sendShieldErrorLog(code: 4)
                 return
             }
             subCheck(3)
         } else if typeSecurity == 3 {
             if checkOutdatedOS() {
+//                print("ERROR 3")
                 sendShieldErrorLog(code: 12)
                 return
             }
             subCheck(4)
         } else if typeSecurity == 4 {
             if checkTempering() {
+//                print("ERROR 4")
                 sendShieldErrorLog(code: 14)
                 return
             }
             subCheck(5)
         } else if typeSecurity == 5 {
             if checkHooked() {
+//                print("ERROR 5")
                 sendShieldErrorLog(code: 22)
                 return
             }
             subCheck(6)
         } else if typeSecurity == 6 {
             if checkDebugging() {
+//                print("ERROR 6")
                 sendShieldErrorLog(code: 6)
                 return
             }
@@ -509,42 +494,49 @@ private class Process: NSObject, CLLocationManagerDelegate {
             NotificationCenter.default.addObserver(self, selector: #selector(screenDidConnect), name: UIScreen.didConnectNotification, object: nil)
             NotificationCenter.default.addObserver(self, selector: #selector(screenDidDisconnect), name: UIScreen.didDisconnectNotification, object: nil)
             if checkScreenCasting() {
+//                print("ERROR 7")
                 sendShieldErrorLog(code: 7)
                 return
             }
             subCheck(8)
         } else if typeSecurity == 8 {
             if checkScreenOverlay() {
+//                print("ERROR 8")
                 sendShieldErrorLog(code: 15)
                 return
             }
             subCheck(9)
         } else if typeSecurity == 9 {
             if checkCallForward() {
+//                print("ERROR 9")
                 sendShieldErrorLog(code: 2)
                 return
             }
             subCheck(10)
         } else if typeSecurity == 10 {
             if checkMultipleLogin() {
+//                print("ERROR 10")
                 sendShieldErrorLog(code: 1)
                 return
             }
             subCheck(11)
         } else if typeSecurity == 11 {
             if checkSimSwap() {
+//                print("ERROR 11")
                 sendShieldErrorLog(code: 3)
                 return
             }
             subCheck(12)
         } else if typeSecurity == 12 {
             if checkGeovelocity() {
+//                print("ERROR 12")
                 sendShieldErrorLog(code: 21)
                 return
             }
             subCheck(13)
         } else if typeSecurity == 13 {
             if checkBehaviourAnalysis() {
+//                print("ERROR 13")
                 sendShieldErrorLog(code: 17)
                 return
             }
