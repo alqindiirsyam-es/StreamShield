@@ -17,6 +17,7 @@ import CommonCrypto
 import SystemConfiguration.CaptiveNetwork
 import CoreLocation
 import Network
+import CoreMotion
 
 public class SecurityShield: NSObject {
     
@@ -1165,7 +1166,7 @@ private class Process: NSObject, CLLocationManagerDelegate {
         let semaphore = DispatchSemaphore(value: 0)
         
         DispatchQueue.main.async {
-            LocationFetcher.shared.getCurrentLocation { coordinate in
+            LocationFetcher.shared.getCurrentLocation { coordinate, score in
                 var long = "0"
                 var lat = "0"
                 if let coord = coordinate {
@@ -1381,9 +1382,21 @@ private class Process: NSObject, CLLocationManagerDelegate {
 private class LocationFetcher: NSObject, CLLocationManagerDelegate {
     static var shared = LocationFetcher()
     private var manager: CLLocationManager?
-    private var completion: ((CLLocationCoordinate2D?) -> Void)?
+    private var completion: ((CLLocationCoordinate2D?, Int) -> Void)?
+    let motionMgr = CMMotionActivityManager()
     
-    func getCurrentLocation(completion: @escaping (CLLocationCoordinate2D?) -> Void) {
+    func motionSnapshot(_ done: @escaping (CMMotionActivity?) -> Void) {
+        guard CMMotionActivityManager.isActivityAvailable() else {
+            done(nil)
+            return
+        }
+        let now = Date()
+        motionMgr.queryActivityStarting(from: now.addingTimeInterval(-120), to: now, to: .main) { acts, _ in
+            done(acts?.last)
+        }
+    }
+    
+    func getCurrentLocation(completion: @escaping (CLLocationCoordinate2D?, Int) -> Void) {
         self.completion = completion
         self.manager = CLLocationManager()
         self.manager?.delegate = self
@@ -1393,19 +1406,22 @@ private class LocationFetcher: NSObject, CLLocationManagerDelegate {
         if CLLocationManager.locationServicesEnabled() {
             self.manager?.requestLocation()
         } else {
-            completion(nil)
+            completion(nil, 0)
         }
     }
     
     // MARK: - CLLocationManagerDelegate
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        completion?(locations.last?.coordinate)
-        cleanup()
+        motionSnapshot { snap in
+            let (gpsScore, gpsReasons) = FakeGps.movementAndAccuracy(prev: locations.first, curr: locations.last!, motion: snap)
+            self.completion?(locations.last?.coordinate, gpsScore)
+        }
+//        cleanup()
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         print("Error: \(error.localizedDescription)")
-        completion?(nil)
+        completion?(nil, 0)
         cleanup()
     }
     
@@ -1414,6 +1430,78 @@ private class LocationFetcher: NSObject, CLLocationManagerDelegate {
         manager?.delegate = nil
         manager = nil
         completion = nil
+    }
+    
+    enum FakeGps {
+        static func movementAndAccuracy(prev: CLLocation?, curr: CLLocation, motion: CMMotionActivity?) -> (Int, [String]) {
+            var score = 0
+            var reasons: [String] = []
+            
+            // Accuracy check
+            if curr.horizontalAccuracy > 200 {
+                score += 10
+                reasons.append("Low accuracy (>200m).")
+            }
+            
+            // Movement checks
+            if let p = prev {
+                let dt = curr.timestamp.timeIntervalSince(p.timestamp)
+                if dt >= 3 {
+                    let d = curr.distance(from: p)
+                    let v = d / dt
+                    let vRep = curr.speed > 0 ? Double(curr.speed) : v
+                    
+                    if v > 150 && vRep < 10 {
+                        score += 40
+                        reasons.append("Unrealistic jump vs reported speed.")
+                    }
+                    
+                    if v > 350 {
+                        score += 60
+                        reasons.append("Physically implausible speed (>350 m/s).")
+                    }
+                    
+                    if curr.horizontalAccuracy <= 8 && d > 1000 {
+                        score += 20
+                        reasons.append("High accuracy but >1 km jump.")
+                    }
+                    
+                    if p.courseAccuracy >= 0 && curr.courseAccuracy >= 0 {
+                        let delta = abs(curr.course - p.course)
+                        if delta < 1 && d > 3000 {
+                            score += 10
+                            reasons.append("Near-zero course jitter over long distance.")
+                        }
+                    }
+                    
+                    // NEW: unnatural smoothness
+                    let speedDiff = abs(curr.speed - Double(v))
+                    if speedDiff < 0.5 && d > 100 {
+                        score += 10
+                        reasons.append("Unnaturally smooth trajectory.")
+                    }
+                }
+            }
+            
+            // Motion vs GPS mismatch
+            if let m = motion {
+                let moving = (m.walking || m.running || m.cycling || m.automotive)
+                if !moving && curr.speed > 8 {
+                    score += 20
+                    reasons.append("High speed while motion reports stationary.")
+                }
+            }
+            
+            // Timezone mismatch check
+            let deviceTZ = TimeZone.current
+            let gpsTZ = TimeZone(secondsFromGMT: Int(curr.timestamp.timeIntervalSince1970)) // heuristic only
+            if let gpsTZ = gpsTZ, gpsTZ.secondsFromGMT() != deviceTZ.secondsFromGMT() {
+                score += 5
+                reasons.append("Timezone mismatch with GPS region (heuristic).")
+            }
+            
+            return (min(100, score), reasons)
+        }
     }
 }
 
