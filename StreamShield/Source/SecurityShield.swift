@@ -292,11 +292,17 @@ private class Process: NSObject, CLLocationManagerDelegate {
                         if jsonData["minimum_ios_version"]! != nil {
                             Preference.setMinimumOsVersion(value: jsonData["minimum_ios_version"]! as! String)
                         }
-                        if jsonData["check_sum"]! != nil {
-                            Preference.setCheckTempering(value: jsonData["check_sum"]! as! String == "1")
-                            Preference.setCheckTemperingAction(value: jsonData["action"]! as! String)
-                            Preference.setCheckTemperingAlertTitle(value: jsonData["alert_title"]! as! String)
-                            Preference.setCheckTemperingAlertMessage(value: jsonData["alert_message"]! as! String)
+//                        if jsonData["check_sum"]! != nil {
+//                            Preference.setCheckTempering(value: jsonData["check_sum"]! as! String == "1")
+//                            Preference.setCheckTemperingAction(value: jsonData["action"]! as! String)
+//                            Preference.setCheckTemperingAlertTitle(value: jsonData["alert_title"]! as! String)
+//                            Preference.setCheckTemperingAlertMessage(value: jsonData["alert_message"]! as! String)
+//                        }
+                        if jsonData["check_cloned_app"]! != nil {
+                            Preference.setCheckCloned(value: jsonData["check_cloned_app"]! as! String == "1")
+                            Preference.setCheckClonedAction(value: jsonData["action"]! as! String)
+                            Preference.setCheckClonedAlertTitle(value: jsonData["alert_title"]! as! String)
+                            Preference.setCheckClonedAlertMessage(value: jsonData["alert_message"]! as! String)
                         }
                         if jsonData["check_hook"]! != nil {
                             Preference.setCheckHooked(value: jsonData["check_hook"]! as! String == "1")
@@ -471,9 +477,8 @@ private class Process: NSObject, CLLocationManagerDelegate {
             }
             subCheck(4)
         } else if typeSecurity == 4 {
-            if checkTempering() {
+            if checkCloned() {
 //                print("ERROR 4")
-                sendShieldErrorLog(code: 14)
                 return
             }
             subCheck(5)
@@ -531,14 +536,12 @@ private class Process: NSObject, CLLocationManagerDelegate {
         } else if typeSecurity == 12 {
             if checkGeovelocity() {
 //                print("ERROR 12")
-                sendShieldErrorLog(code: 21)
                 return
             }
             subCheck(13)
         } else if typeSecurity == 13 {
             if checkBehaviourAnalysis() {
 //                print("ERROR 13")
-                sendShieldErrorLog(code: 17)
                 return
             }
         }
@@ -694,6 +697,14 @@ private class Process: NSObject, CLLocationManagerDelegate {
                     }
                 }
             })
+            return true
+        }
+        return false
+    }
+    
+    static func checkCloned() -> Bool {
+        if Preference.getCheckCloned() {
+            isCloned()
             return true
         }
         return false
@@ -874,29 +885,8 @@ private class Process: NSObject, CLLocationManagerDelegate {
     }
     
     static func checkGeovelocity() -> Bool {
-        if Preference.getCheckGeoVelocity() && isGeovelocityDetected() {
-            DispatchQueue.main.async(execute: {
-                let alert = SSLibAlertController(title: Preference.getCheckGeoVelocityAlertTitle(), message: Preference.getCheckGeoVelocityAlertMessage(), preferredStyle: .alert)
-                if Preference.getCheckGeoVelocityAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE {
-                    alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in
-                        subCheck(13)
-                    }))
-                    if UIApplication.shared.visibleViewController?.navigationController != nil {
-                        UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
-                    } else {
-                        UIApplication.shared.visibleViewController?.present(alert, animated: true, completion: nil)
-                    }
-                } else {
-                    alert.addAction(UIAlertAction(title: "Exit", style: UIAlertAction.Style.default, handler: {_ in
-                        exit(-141)
-                    }))
-                    if UIApplication.shared.visibleViewController?.navigationController != nil {
-                        UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
-                    } else {
-                        UIApplication.shared.visibleViewController?.present(alert, animated: true, completion: nil)
-                    }
-                }
-            })
+        if Preference.getCheckGeoVelocity() {
+            isGeovelocityDetected()
             return true
         }
         return false
@@ -956,6 +946,7 @@ private class Process: NSObject, CLLocationManagerDelegate {
     }
     
     private static func isTempering() -> Bool {
+        
         return false
     }
     
@@ -998,6 +989,76 @@ private class Process: NSObject, CLLocationManagerDelegate {
             }
         }
         return false
+    }
+    
+    private static func isCloned() {
+        let bundleId = Bundle.main.bundleIdentifier ?? ""
+        guard let dict = Bundle.main.infoDictionary,
+              let teamId = dict["com.apple.developer.team-identifier"] as? String else {
+            subCheck(6)
+            return
+        }
+        let parameter: [String : Any] = [
+            "api_key": Preference.getAccount(),
+            "app_id": bundleId,
+            "app_name": Preference.getAppId(),
+            "team_id": teamId
+        ]
+        SecurityShield.postDataWithCookiesAndUserAgent(from: URL(string: Preference.getDomainOpr() + "get_app_list")!, parameter: parameter) { data, response, error in
+            let response = response as? HTTPURLResponse
+            if response?.statusCode != 200 || error != nil {
+                subCheck(6)
+                return
+            }
+            if let data = data, let responseString = String(data: data, encoding: .utf8) {
+                if !responseString.isEmpty {
+                    if let stringData = responseString.data(using: .utf8) {
+                        do {
+                            if let jsonData = try JSONSerialization.jsonObject(with: stringData, options: []) as? [String: Any] {
+                                let result = jsonData["error_code"] as? Int ?? 0
+                                if result == 1 {
+                                    sendShieldErrorLog(code: 14)
+                                    DispatchQueue.main.async(execute: {
+                                        let alert = SSLibAlertController(title: Preference.getCheckClonedAlertTitle(), message: Preference.getCheckClonedAlertMessage(), preferredStyle: .alert)
+                                        if Preference.getCheckClonedAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE {
+                                            alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in
+                                                subCheck(6)
+                                            }))
+                                            if UIApplication.shared.visibleViewController?.navigationController != nil {
+                                                UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
+                                            } else {
+                                                UIApplication.shared.visibleViewController?.present(alert, animated: true, completion: nil)
+                                            }
+                                        } else {
+                                            alert.addAction(UIAlertAction(title: "Exit", style: UIAlertAction.Style.default, handler: {_ in
+                                                exit(-141)
+                                            }))
+                                            if UIApplication.shared.visibleViewController?.navigationController != nil {
+                                                UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
+                                            } else {
+                                                UIApplication.shared.visibleViewController?.present(alert, animated: true, completion: nil)
+                                            }
+                                        }
+                                    })
+                                } else {
+                                    subCheck(6)
+                                }
+                            } else {
+                                subCheck(6)
+                            }
+                        } catch {
+                            
+                        }
+                    } else {
+                        subCheck(6)
+                    }
+                } else {
+                    subCheck(6)
+                }
+            } else {
+                subCheck(6)
+            }
+        }
     }
     
     private static func isScreenCasting() -> Bool {
@@ -1066,8 +1127,39 @@ private class Process: NSObject, CLLocationManagerDelegate {
         return simData
     }
     
-    private static func isGeovelocityDetected() -> Bool {
-        return false
+    private static func isGeovelocityDetected() {
+        DispatchQueue.main.async {
+            LocationFetcher.shared.getCurrentLocation { coordinate, score in
+                if score > 0 {
+                    sendShieldErrorLog(code: 21)
+                    sendShieldErrorLog(code: 28)
+                    DispatchQueue.main.async(execute: {
+                        let alert = SSLibAlertController(title: Preference.getCheckGeoVelocityAlertTitle(), message: Preference.getCheckGeoVelocityAlertMessage(), preferredStyle: .alert)
+                        if Preference.getCheckGeoVelocityAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE {
+                            alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in
+                                subCheck(13)
+                            }))
+                            if UIApplication.shared.visibleViewController?.navigationController != nil {
+                                UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
+                            } else {
+                                UIApplication.shared.visibleViewController?.present(alert, animated: true, completion: nil)
+                            }
+                        } else {
+                            alert.addAction(UIAlertAction(title: "Exit", style: UIAlertAction.Style.default, handler: {_ in
+                                exit(-141)
+                            }))
+                            if UIApplication.shared.visibleViewController?.navigationController != nil {
+                                UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
+                            } else {
+                                UIApplication.shared.visibleViewController?.present(alert, animated: true, completion: nil)
+                            }
+                        }
+                    })
+                } else {
+                    subCheck(13)
+                }
+            }
+        }
     }
     
     private static func isSuspiciousBehavior() {
@@ -1077,12 +1169,14 @@ private class Process: NSObject, CLLocationManagerDelegate {
             SecurityShield.postDataWithCookiesAndUserAgent(from: URL(string: Preference.getDomainOpr() + "data_capture")!, parameter: data) { data, response, error in
                 let response = response as? HTTPURLResponse
                 if response?.statusCode != 200 || error != nil {
+                    subCheck(14)
                     return
                 }
                 if let data = data, let responseString = String(data: data, encoding: .utf8) {
                     if !responseString.isEmpty {
 //                        print("RESPON ANOMALI : \(responseString)")
                         if responseString == "ANOMALY_DETECTED" {
+                            sendShieldErrorLog(code: 17)
                             DispatchQueue.main.async(execute: {
                                 let alert = SSLibAlertController(title: Preference.getCheckBehaviourAnalysisAlertTitle(), message: Preference.getCheckBehaviourAnalysisAlertMessage(), preferredStyle: .alert)
                                 if Preference.getCheckBehaviourAnalysisAction() == PreferencesKey.SECURITY_SHIELD_ALERT_CONTINUE {
@@ -1105,7 +1199,11 @@ private class Process: NSObject, CLLocationManagerDelegate {
                                     }
                                 }
                             })
+                        } else {
+                            subCheck(14)
                         }
+                    } else {
+                        subCheck(14)
                     }
                 }
             }
@@ -1115,15 +1213,17 @@ private class Process: NSObject, CLLocationManagerDelegate {
     private static func sendShieldErrorLog(code: Int) {
         var data = collectDeviceAttributes()
         data["security_shield"] = "\(code)"
-        if let jsonData = try? JSONSerialization.data(withJSONObject: data, options: .prettyPrinted),
-           let jsonString = String(data: jsonData, encoding: .utf8) {
-            let me: String! = SecureUserDefaultsSS.shared.value(forKey: "me") ?? ""
-            let tmessage = TMessageSS()
-            tmessage.mCode = "SSG"
-            tmessage.mStatus = CoreMessage_TMessageUtil.getTID()
-            tmessage.mPIN = me
-            tmessage.mBodies["A112"] = jsonString
-            _ = Service.write(message: tmessage)
+        DispatchQueue.global().async {
+            if let jsonData = try? JSONSerialization.data(withJSONObject: data, options: .prettyPrinted),
+               let jsonString = String(data: jsonData, encoding: .utf8) {
+                let me: String! = SecureUserDefaultsSS.shared.value(forKey: "me") ?? ""
+                let tmessage = TMessageSS()
+                tmessage.mCode = "SSG"
+                tmessage.mStatus = CoreMessage_TMessageUtil.getTID()
+                tmessage.mPIN = me
+                tmessage.mBodies["A112"] = jsonString
+                _ = Service.write(message: tmessage)
+            }
         }
     }
     
@@ -1413,7 +1513,7 @@ private class LocationFetcher: NSObject, CLLocationManagerDelegate {
     // MARK: - CLLocationManagerDelegate
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         motionSnapshot { snap in
-            let (gpsScore, gpsReasons) = FakeGps.movementAndAccuracy(prev: locations.first, curr: locations.last!, motion: snap)
+            let (gpsScore, _) = FakeGps.movementAndAccuracy(prev: locations.first, curr: locations.last!, motion: snap)
             self.completion?(locations.last?.coordinate, gpsScore)
         }
 //        cleanup()
@@ -2357,6 +2457,56 @@ private class Preference {
         }
         return PreferencesKey.ss_hooked_warning
     }
+    
+    /**
+     * Cloned Detection
+     */
+    static func setCheckCloned(value: Bool){
+        SecureUserDefaultsSS.shared.set(value, forKey: PreferencesKey.SS_CHECK_CLONED)
+    }
+    
+    static func getCheckCloned() -> Bool {
+        if let value: Bool = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_CLONED) {
+            return value
+        }
+        return false
+    }
+    static func setCheckClonedAction(value: String){
+        SecureUserDefaultsSS.shared.set(value, forKey: PreferencesKey.SS_CHECK_CLONED_ACTION)
+    }
+    
+    static func getCheckClonedAction() -> String {
+        if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_CLONED_ACTION) {
+            return value
+        }
+        return "0"
+    }
+    static func setCheckClonedAlertTitle(value: String){
+        SecureUserDefaultsSS.shared.set(value, forKey: PreferencesKey.SS_CHECK_CLONED_ALERT_TITLE)
+    }
+    
+    static func getCheckClonedAlertTitle() -> String {
+        if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_CLONED_ALERT_TITLE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_clone_title
+            }
+            return value
+        }
+        return PreferencesKey.ss_clone_title
+    }
+    static func setCheckClonedAlertMessage(value: String){
+        SecureUserDefaultsSS.shared.set(value, forKey: PreferencesKey.SS_CHECK_CLONED_ALERT_MESSAGE)
+    }
+    
+    static func getCheckClonedAlertMessage() -> String {
+        if let value: String = SecureUserDefaultsSS.shared.value(forKey: PreferencesKey.SS_CHECK_CLONED_ALERT_MESSAGE) {
+            if value.isEmpty {
+                return PreferencesKey.ss_clone_continue
+            }
+            return value
+        }
+        return PreferencesKey.ss_clone_continue
+    }
 }
 
 private class PreferencesKey {
@@ -2485,6 +2635,13 @@ private class PreferencesKey {
     static let SS_CHECK_HOOKED_ALERT_MESSAGE = "ss_check_hooked_alert_message"
     static let ss_hooked_title = "Hooked Detected!"
     static let ss_hooked_warning = "Our security shield has detected changes in the application that may indicate Hook or Anti Frida, which could potentially lead to malware infection, data manipulation, and other risks. Please remove this apps and download from official App Store."
+    
+    static let SS_CHECK_CLONED = "ss_check_cloned"
+    static let SS_CHECK_CLONED_ACTION = "ss_check_cloned_action"
+    static let SS_CHECK_CLONED_ALERT_TITLE = "ss_check_cloned_alert_title"
+    static let SS_CHECK_CLONED_ALERT_MESSAGE = "ss_check_cloned_alert_message"
+    static let ss_clone_title = "App Clone Detected!"
+    static let ss_clone_continue = "We are sorry for the inconvenience. For security reasons this app is not allowed to run in cloned instance.";
 }
 
 private class SelfSignedURLSessionDelegate: NSObject, URLSessionTaskDelegate, URLSessionDataDelegate {
