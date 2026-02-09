@@ -2866,7 +2866,7 @@ private class TMessageSS {
     }
     
     init() {
-        mVersion = "1.0.116"
+        mVersion = "1.0.120"
         mBodies[IMEI] = getCLMUserId()
         mBodies[VERCOD] = "2.2.177"
     }
