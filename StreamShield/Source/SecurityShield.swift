@@ -57,12 +57,12 @@ public class SecurityShield: NSObject {
         var result = ""
         let url = URL(string: "\(Preference.getDomainOpr())dipp/NuN1v3rs3/Qm3r4i0/get_ip_domain?account=\(apiKey)")!
         let urlConfig = URLSessionConfiguration.default
-        let sessionDelegate = SelfSignedURLSessionDelegate()
+        let sessionDelegate = SSConfiguration.pinSetMatcher != nil ? PinnedURLSessionSSDelegate() : SelfSignedURLSessionDelegate()
         urlConfig.requestCachePolicy = .returnCacheDataElseLoad
         urlConfig.timeoutIntervalForRequest = 10.0
         urlConfig.timeoutIntervalForResource = 10.0
         let semaphore = DispatchSemaphore(value: 0)
-        let task = URLSession(configuration: urlConfig, delegate: sessionDelegate, delegateQueue: nil).dataTask(with: url) {(data, response, error) in
+        let task = URLSession(configuration: urlConfig, delegate: sessionDelegate as? URLSessionDelegate, delegateQueue: nil).dataTask(with: url) {(data, response, error) in
             guard let data = data,
                 let url = response?.url,
                 let httpResponse = response as? HTTPURLResponse,
@@ -107,12 +107,12 @@ public class SecurityShield: NSObject {
         var result = false
         let url = URL(string: "\(newDomain)dipp/NuN1v3rs3/Qm3r4i0/get_ip_domain?account=\(Preference.getAccount())")!
         let urlConfig = URLSessionConfiguration.default
-        let sessionDelegate = SelfSignedURLSessionDelegate()
+        let sessionDelegate = SSConfiguration.pinSetMatcher != nil ? PinnedURLSessionSSDelegate() : SelfSignedURLSessionDelegate()
         urlConfig.requestCachePolicy = .returnCacheDataElseLoad
         urlConfig.timeoutIntervalForRequest = 10.0
         urlConfig.timeoutIntervalForResource = 10.0
         let semaphore = DispatchSemaphore(value: 0)
-        let task = URLSession(configuration: urlConfig, delegate: sessionDelegate, delegateQueue: nil).dataTask(with: url) {(data, response, error) in
+        let task = URLSession(configuration: urlConfig, delegate: sessionDelegate as? URLSessionDelegate, delegateQueue: nil).dataTask(with: url) {(data, response, error) in
             if let httpResponse = response as? HTTPURLResponse {
                 if httpResponse.statusCode == 200 {
                     guard let url = response?.url,
@@ -201,8 +201,8 @@ public class SecurityShield: NSObject {
         let urlConfig = URLSessionConfiguration.default
         urlConfig.timeoutIntervalForRequest = 30.0
         urlConfig.timeoutIntervalForResource = 60.0
-        let sessionDelegate = SelfSignedURLSessionDelegate()
-        let session = URLSession(configuration: urlConfig, delegate: sessionDelegate, delegateQueue: nil)
+        let sessionDelegate = SSConfiguration.pinSetMatcher != nil ? PinnedURLSessionSSDelegate() : SelfSignedURLSessionDelegate()
+        let session = URLSession(configuration: urlConfig, delegate: sessionDelegate as? URLSessionDelegate, delegateQueue: nil)
         let task = session.dataTask(with: request, completionHandler: completion)
         task.resume()
     }
@@ -3380,4 +3380,72 @@ class CallBackSS : CallBack {
     }
     
     
+}
+
+public protocol PinValidatingSS: AnyObject {
+    func isPinnedHostSN(_ host: String) -> Bool
+    func serverTrustSN(_ trust: SecTrust, matchesPinnedSPKIForHost host: String) -> Bool
+    func reportPinningFailureSN(forHost host: String)
+}
+
+public protocol PinSetMatchingSS: AnyObject {
+    func matchesSN(trust: SecTrust) -> Bool
+}
+
+public enum SSConfiguration {
+
+    private(set) static weak var pinValidator:  PinValidatingSS?
+    private(set) static weak var pinSetMatcher: PinSetMatchingSS?
+    
+    public static func configure(
+        pinValidator:  PinValidatingSS,
+        pinSetMatcher: PinSetMatchingSS
+    ) {
+        Self.pinValidator  = pinValidator
+        Self.pinSetMatcher = pinSetMatcher
+    }
+}
+
+final class PinnedURLSessionSSDelegate: NSObject,
+    URLSessionTaskDelegate, URLSessionDataDelegate {
+
+    // Ambil dari NexilisConfiguration — tidak perlu inject per-instance
+    private var pinValidator:  PinValidatingSS?  { SSConfiguration.pinValidator }
+    private var pinSetMatcher: PinSetMatchingSS? { SSConfiguration.pinSetMatcher }
+
+    func urlSession(_ session: URLSession,
+                    didReceive challenge: URLAuthenticationChallenge,
+                    completionHandler: @escaping (URLSession.AuthChallengeDisposition,
+                                                   URLCredential?) -> Void) {
+
+        guard challenge.protectionSpace.authenticationMethod
+                == NSURLAuthenticationMethodServerTrust,
+              let trust = challenge.protectionSpace.serverTrust else {
+            completionHandler(.performDefaultHandling, nil)
+            return
+        }
+
+        var cfError: CFError?
+        guard SecTrustEvaluateWithError(trust, &cfError) else {
+            completionHandler(.cancelAuthenticationChallenge, nil)
+            return
+        }
+
+        let host = challenge.protectionSpace.host
+
+        if let validator = pinValidator, validator.isPinnedHostSN(host) {
+            let spkiMatch  = validator.serverTrustSN(trust, matchesPinnedSPKIForHost: host)
+            let storeMatch = pinSetMatcher?.matchesSN(trust: trust) ?? false
+
+            if spkiMatch || storeMatch {
+                completionHandler(.useCredential, URLCredential(trust: trust))
+            } else {
+                validator.reportPinningFailureSN(forHost: host)
+                completionHandler(.cancelAuthenticationChallenge, nil)
+            }
+            return
+        }
+
+        completionHandler(.useCredential, URLCredential(trust: trust))
+    }
 }
