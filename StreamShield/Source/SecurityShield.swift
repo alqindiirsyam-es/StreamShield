@@ -57,16 +57,16 @@ public class SecurityShield: NSObject {
         var result = ""
         let url = URL(string: "\(Preference.getDomainOpr())dipp/NuN1v3rs3/Qm3r4i0/get_ip_domain?account=\(apiKey)")!
         let urlConfig = URLSessionConfiguration.default
-        let sessionDelegate = SSConfiguration.pinSetMatcher != nil ? PinnedURLSessionSSDelegate() : SelfSignedURLSessionDelegate()
+        let sessionDelegate = PinnedURLSessionSSDelegate()
         urlConfig.requestCachePolicy = .returnCacheDataElseLoad
         urlConfig.timeoutIntervalForRequest = 10.0
         urlConfig.timeoutIntervalForResource = 10.0
         let semaphore = DispatchSemaphore(value: 0)
-        let task = URLSession(configuration: urlConfig, delegate: sessionDelegate as? URLSessionDelegate, delegateQueue: nil).dataTask(with: url) {(data, response, error) in
+        let task = URLSession(configuration: urlConfig, delegate: sessionDelegate, delegateQueue: nil).dataTask(with: url) {(data, response, error) in
             guard let data = data,
-                let url = response?.url,
+                let _ = response?.url,
                 let httpResponse = response as? HTTPURLResponse,
-                let fields = httpResponse.allHeaderFields as? [String: String] else {
+                let _ = httpResponse.allHeaderFields as? [String: String] else {
                 semaphore.signal()
                 return
             }
@@ -107,16 +107,16 @@ public class SecurityShield: NSObject {
         var result = false
         let url = URL(string: "\(newDomain)dipp/NuN1v3rs3/Qm3r4i0/get_ip_domain?account=\(Preference.getAccount())")!
         let urlConfig = URLSessionConfiguration.default
-        let sessionDelegate = SSConfiguration.pinSetMatcher != nil ? PinnedURLSessionSSDelegate() : SelfSignedURLSessionDelegate()
+        let sessionDelegate = PinnedURLSessionSSDelegate()
         urlConfig.requestCachePolicy = .returnCacheDataElseLoad
         urlConfig.timeoutIntervalForRequest = 10.0
         urlConfig.timeoutIntervalForResource = 10.0
         let semaphore = DispatchSemaphore(value: 0)
-        let task = URLSession(configuration: urlConfig, delegate: sessionDelegate as? URLSessionDelegate, delegateQueue: nil).dataTask(with: url) {(data, response, error) in
+        let task = URLSession(configuration: urlConfig, delegate: sessionDelegate, delegateQueue: nil).dataTask(with: url) {(data, response, error) in
             if let httpResponse = response as? HTTPURLResponse {
                 if httpResponse.statusCode == 200 {
-                    guard let url = response?.url,
-                        let fields = httpResponse.allHeaderFields as? [String: String] else {
+                    guard let _ = response?.url,
+                        let _ = httpResponse.allHeaderFields as? [String: String] else {
                         semaphore.signal()
                         return
                     }
@@ -201,8 +201,8 @@ public class SecurityShield: NSObject {
         let urlConfig = URLSessionConfiguration.default
         urlConfig.timeoutIntervalForRequest = 30.0
         urlConfig.timeoutIntervalForResource = 60.0
-        let sessionDelegate = SSConfiguration.pinSetMatcher != nil ? PinnedURLSessionSSDelegate() : SelfSignedURLSessionDelegate()
-        let session = URLSession(configuration: urlConfig, delegate: sessionDelegate as? URLSessionDelegate, delegateQueue: nil)
+        let sessionDelegate = PinnedURLSessionSSDelegate()
+        let session = URLSession(configuration: urlConfig, delegate: sessionDelegate, delegateQueue: nil)
         let task = session.dataTask(with: request, completionHandler: completion)
         task.resume()
     }
@@ -409,7 +409,22 @@ private class Process: NSObject, CLLocationManagerDelegate {
      * 22: Hook/Anti Frida Detected
      */
     
+    private static var stateManager = 0
     static func subCheck(_ typeSecurity : Int) {
+        guard isRightState(code: typeSecurity) else {
+            DispatchQueue.main.async {
+                let alert = SSLibAlertController(title: "", message: "Perangkat/jaringan/OS/aplikasi tidak memenuhi syarat keamanan.(" + checkErrorCode(code: typeSecurity) + ")", preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: {_ in
+                    exit(172)
+                }))
+                if UIApplication.shared.visibleViewController?.navigationController != nil {
+                    UIApplication.shared.visibleViewController?.navigationController?.present(alert, animated: true, completion: nil)
+                } else {
+                    UIApplication.shared.visibleViewController?.present(alert, animated: true, completion: nil)
+                }
+            }
+            return
+        }
         if typeSecurity == 1 {
             if checkEmulator() {
 //                print("ERROR 1")
@@ -499,7 +514,41 @@ private class Process: NSObject, CLLocationManagerDelegate {
 //                print("ERROR 13")
                 return
             }
+            stateManager = 0
         }
+    }
+    
+    private static func isRightState(code: Int) -> Bool {
+        return code == stateManager + 1
+    }
+    
+    private static func checkErrorCode(code: Int) -> String {
+        if code == 1 {
+            return "3501"
+        } else if code == 2 {
+            return "8429"
+        } else if code == 3 {
+            return "8743"
+        } else if code == 4 {
+            return "7245"
+        } else if code == 5 {
+            return "2144"
+        } else if code == 6 {
+            return "3596"
+        } else if code == 7 {
+            return "9948"
+        } else if code == 8 {
+            return "2754"
+        } else if code == 9 {
+            return "9643"
+        } else if code == 10 {
+            return "5432"
+        } else if code == 11 {
+            return "2570"
+        } else if code == 12 {
+            return "8194"
+        }
+        return "8526"
     }
     
     static func checkEmulator() -> Bool {
@@ -528,6 +577,7 @@ private class Process: NSObject, CLLocationManagerDelegate {
             })
             return true
         }
+        stateManager = 1
         return false
     }
     
@@ -557,6 +607,7 @@ private class Process: NSObject, CLLocationManagerDelegate {
             })
             return true
         }
+        stateManager = 2
         return false
     }
     
@@ -593,9 +644,9 @@ private class Process: NSObject, CLLocationManagerDelegate {
                     })
                     return true
                 }
-            } else {
             }
         }
+        stateManager = 3
         return false
     }
     
@@ -654,6 +705,7 @@ private class Process: NSObject, CLLocationManagerDelegate {
             })
             return true
         }
+        stateManager = 5
         return false
     }
     
@@ -662,6 +714,7 @@ private class Process: NSObject, CLLocationManagerDelegate {
             isCloned()
             return true
         }
+        stateManager = 4
         return false
     }
     
@@ -691,6 +744,7 @@ private class Process: NSObject, CLLocationManagerDelegate {
             })
             return true
         }
+        stateManager = 6
         return false
     }
     
@@ -720,6 +774,7 @@ private class Process: NSObject, CLLocationManagerDelegate {
             })
             return true
         }
+        stateManager = 7
         return false
     }
     
@@ -749,6 +804,7 @@ private class Process: NSObject, CLLocationManagerDelegate {
             })
             return true
         }
+        stateManager = 8
         return false
     }
     
@@ -778,6 +834,7 @@ private class Process: NSObject, CLLocationManagerDelegate {
             })
             return true
         }
+        stateManager = 9
         return false
     }
     
@@ -807,6 +864,7 @@ private class Process: NSObject, CLLocationManagerDelegate {
             })
             return true
         }
+        stateManager = 10
         return false
     }
     
@@ -836,6 +894,7 @@ private class Process: NSObject, CLLocationManagerDelegate {
             })
             return true
         }
+        stateManager = 11
         return false
     }
     
@@ -844,6 +903,7 @@ private class Process: NSObject, CLLocationManagerDelegate {
             isGeovelocityDetected()
             return true
         }
+        stateManager = 12
         return false
     }
     
@@ -873,6 +933,7 @@ private class Process: NSObject, CLLocationManagerDelegate {
         return true
         #else
         #endif
+        stateManager = 1
         return false
     }
     
@@ -896,6 +957,7 @@ private class Process: NSObject, CLLocationManagerDelegate {
         } catch {
             // Could not write outside sandbox
         }
+        stateManager = 2
         
         return false
     }
@@ -915,6 +977,7 @@ private class Process: NSObject, CLLocationManagerDelegate {
         if result == 0 {
             return (info.kp_proc.p_flag & P_TRACED) != 0
         } else {
+            stateManager = 6
             return false
         }
     }
@@ -943,6 +1006,7 @@ private class Process: NSObject, CLLocationManagerDelegate {
                 }
             }
         }
+        stateManager = 5
         return false
     }
     
@@ -996,22 +1060,27 @@ private class Process: NSObject, CLLocationManagerDelegate {
                                         }
                                     })
                                 } else {
-                                    subCheck(6)
+                                    stateManager = 4
+                                    subCheck(5)
                                 }
                             } else {
-                                subCheck(6)
+                                stateManager = 4
+                                subCheck(5)
                             }
                         } catch {
                             
                         }
                     } else {
-                        subCheck(6)
+                        stateManager = 4
+                        subCheck(5)
                     }
                 } else {
-                    subCheck(6)
+                    stateManager = 4
+                    subCheck(5)
                 }
             } else {
-                subCheck(6)
+                stateManager = 4
+                subCheck(5)
             }
         }
     }
@@ -1034,19 +1103,23 @@ private class Process: NSObject, CLLocationManagerDelegate {
         if screens.count > 1 {
             return true
         } else {
+            stateManager = 7
             return false
         }
     }
     
     private static func isScreenOverlay() -> Bool {
+        stateManager = 8
         return false
     }
     
     private static func isCallForwarded() -> Bool {
+        stateManager = 9
         return false
     }
     
     private static func isMultipleLogin() -> Bool {
+        stateManager = 10
         return false
     }
     
@@ -1054,6 +1127,7 @@ private class Process: NSObject, CLLocationManagerDelegate {
         guard let savedSimInfo: [String: [String: String]]? = SecureUserDefaultsSS.shared.value(forKey: "SavedSIMInfo") else {
             let simInfo = getSIMInfo()
             SecureUserDefaultsSS.shared.set(simInfo, forKey: "SavedSIMInfo")
+            stateManager = 11
             return false
         }
         let currentSimInfo = getSIMInfo()
@@ -1111,6 +1185,7 @@ private class Process: NSObject, CLLocationManagerDelegate {
                         }
                     })
                 } else {
+                    stateManager = 12
                     subCheck(13)
                 }
             }
@@ -2462,6 +2537,13 @@ private class Preference {
         }
         return PreferencesKey.ss_clone_continue
     }
+    
+    static func getCertificatePinningWebview() -> String {
+        if let value: String = SecureUserDefaultsSS.shared.value(forKey: "pb_certificate_pinning_webview") {
+            return value
+        }
+        return ""
+    }
 }
 
 private class PreferencesKey {
@@ -3382,37 +3464,8 @@ class CallBackSS : CallBack {
     
 }
 
-public protocol PinValidatingSS: AnyObject {
-    func isPinnedHostSN(_ host: String) -> Bool
-    func serverTrustSN(_ trust: SecTrust, matchesPinnedSPKIForHost host: String) -> Bool
-    func reportPinningFailureSN(forHost host: String)
-}
-
-public protocol PinSetMatchingSS: AnyObject {
-    func matchesSN(trust: SecTrust) -> Bool
-}
-
-public enum SSConfiguration {
-
-    private(set) static weak var pinValidator:  PinValidatingSS?
-    private(set) static weak var pinSetMatcher: PinSetMatchingSS?
-    
-    public static func configure(
-        pinValidator:  PinValidatingSS,
-        pinSetMatcher: PinSetMatchingSS
-    ) {
-        Self.pinValidator  = pinValidator
-        Self.pinSetMatcher = pinSetMatcher
-    }
-}
-
 final class PinnedURLSessionSSDelegate: NSObject,
     URLSessionTaskDelegate, URLSessionDataDelegate {
-
-    // Ambil dari NexilisConfiguration — tidak perlu inject per-instance
-    private var pinValidator:  PinValidatingSS?  { SSConfiguration.pinValidator }
-    private var pinSetMatcher: PinSetMatchingSS? { SSConfiguration.pinSetMatcher }
-
     func urlSession(_ session: URLSession,
                     didReceive challenge: URLAuthenticationChallenge,
                     completionHandler: @escaping (URLSession.AuthChallengeDisposition,
@@ -3431,21 +3484,47 @@ final class PinnedURLSessionSSDelegate: NSObject,
             return
         }
 
-        let host = challenge.protectionSpace.host
-
-        if let validator = pinValidator, validator.isPinnedHostSN(host) {
-            let spkiMatch  = validator.serverTrustSN(trust, matchesPinnedSPKIForHost: host)
-            let storeMatch = pinSetMatcher?.matchesSN(trust: trust) ?? false
-
-            if spkiMatch || storeMatch {
-                completionHandler(.useCredential, URLCredential(trust: trust))
-            } else {
-                validator.reportPinningFailureSN(forHost: host)
-                completionHandler(.cancelAuthenticationChallenge, nil)
-            }
+        guard let serverTrust = challenge.protectionSpace.serverTrust else {
+            completionHandler(.cancelAuthenticationChallenge, nil)
             return
+        }
+        
+        if let publicKeyHash = extractPublicKeyHash(from: serverTrust) {
+            let domain = challenge.protectionSpace.host
+            let storedCertificate = Preference.getCertificatePinningWebview()
+            if let jsonData = storedCertificate.data(using: .utf8),
+               let certJson = try? JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: String] {
+                if publicKeyHash == certJson[domain] {
+                    completionHandler(.useCredential, URLCredential(trust: serverTrust))
+                } else {
+                    completionHandler(.cancelAuthenticationChallenge, nil)
+                }
+            }
+        } else {
+            completionHandler(.cancelAuthenticationChallenge, nil)
         }
 
         completionHandler(.useCredential, URLCredential(trust: trust))
+    }
+    
+    func extractPublicKeyHash(from serverTrust: SecTrust) -> String? {
+        guard let certificate = SecTrustGetCertificateAtIndex(serverTrust, 0) else { return nil }
+        guard let publicKey = SecCertificateCopyKey(certificate) else { return nil }
+        
+        var error: Unmanaged<CFError>?
+        guard let publicKeyData = SecKeyCopyExternalRepresentation(publicKey, &error) as Data? else {
+            return nil
+        }
+        
+        // Compute SHA-256 hash
+        var hash = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
+        publicKeyData.withUnsafeBytes {
+            _ = CC_SHA256($0.baseAddress, CC_LONG(publicKeyData.count), &hash)
+        }
+        
+        let hashData = Data(hash)
+        let base64Hash = hashData.base64EncodedString()
+        
+        return base64Hash
     }
 }
