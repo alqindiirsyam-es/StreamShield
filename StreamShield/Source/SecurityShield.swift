@@ -3488,43 +3488,185 @@ final class PinnedURLSessionSSDelegate: NSObject,
             completionHandler(.cancelAuthenticationChallenge, nil)
             return
         }
-        
-        if let publicKeyHash = extractPublicKeyHash(from: serverTrust) {
-            let domain = challenge.protectionSpace.host
-            let storedCertificate = Preference.getCertificatePinningWebview()
-            if let jsonData = storedCertificate.data(using: .utf8),
-               let certJson = try? JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: String] {
-                if publicKeyHash == certJson[domain] {
-                    completionHandler(.useCredential, URLCredential(trust: serverTrust))
-                } else {
-                    completionHandler(.cancelAuthenticationChallenge, nil)
-                }
-            }
-        } else {
+
+        // Fix: every branch below must call completionHandler exactly once and then
+        // return. Previously, each branch already called completionHandler, but
+        // execution still fell through to an unconditional final call
+        // (`completionHandler(.useCredential, URLCredential(trust: trust))`) - that's
+        // the "completion handler called more than once" API misuse. Worse, when JSON
+        // parsing of the stored pin failed there was no else-branch at all, so the
+        // *only* call that ran was that unconditional final one - meaning a corrupted/
+        // unparseable pin silently bypassed pinning entirely (fail-open) instead of
+        // rejecting the connection (fail-closed).
+        guard let publicKeyHash = extractPublicKeyHash(from: serverTrust) else {
             completionHandler(.cancelAuthenticationChallenge, nil)
+            return
         }
 
-        completionHandler(.useCredential, URLCredential(trust: trust))
+        let domain = challenge.protectionSpace.host
+        let storedCertificate = Preference.getCertificatePinningWebview()
+        guard let jsonData = storedCertificate.data(using: .utf8) else {
+            // Fix: fail closed - don't trust the connection if the pin can't be read.
+            #if DEBUG
+            print("[Pinning] FAIL: stored pin string is not valid UTF-8. raw=\(storedCertificate)")
+            #endif
+            completionHandler(.cancelAuthenticationChallenge, nil)
+            return
+        }
+
+        // Fix: support both the new format (domain -> array of accepted hashes, so a
+        // certificate/key rotation can be handled by listing old+new hash together
+        // ahead of time) and the legacy format (domain -> single hash string) still
+        // possibly cached on a device from before this migration, so existing
+        // installs don't get hard-locked-out mid-migration.
+        let acceptedHashes: [String]
+        if let certJsonArray = try? JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: [String]] {
+            acceptedHashes = certJsonArray[domain] ?? []
+        } else if let certJsonLegacy = try? JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: String] {
+            acceptedHashes = certJsonLegacy[domain].map { [$0] } ?? []
+        } else {
+//            #if DEBUG
+//            print("[Pinning] FAIL: stored pin JSON did not parse as [String:[String]] or [String:String]. raw=\(storedCertificate)")
+//            #endif
+            completionHandler(.cancelAuthenticationChallenge, nil)
+            return
+        }
+
+        #if DEBUG
+        print("[Pinning] domain=\(domain) computedHash=\(publicKeyHash) acceptedHashes=\(acceptedHashes) storedPinJSON=\(storedCertificate)")
+        #endif
+
+        if acceptedHashes.contains(publicKeyHash) {
+            completionHandler(.useCredential, URLCredential(trust: serverTrust))
+        } else {
+//            #if DEBUG
+//            print("[Pinning] FAIL: computedHash not found in acceptedHashes for domain \(domain)")
+//            #endif
+            completionHandler(.cancelAuthenticationChallenge, nil)
+        }
     }
     
+    // Fix: SecKeyCopyExternalRepresentation does NOT return the same bytes as
+    // `openssl pkey -pubin -outform DER` (SubjectPublicKeyInfo). It returns just the
+    // raw key material - PKCS#1 (modulus + exponent) for RSA, or a raw X9.63 point for
+    // EC - with no ASN.1 "AlgorithmIdentifier" header. openssl hashes the FULL SPKI
+    // (header + key), so hashing the raw bytes directly produces a hash that will
+    // NEVER match a pin captured via openssl/browser dev tools/most pinning
+    // generators, even when it's the exact correct certificate. This is a well known
+    // iOS pinning pitfall (see TrustKit, OWASP Mobile Pinning Guide). Fix: detect the
+    // key's type/size and prepend the matching DER header before hashing, so the
+    // computed hash matches what `openssl ... | openssl dgst -sha256 | openssl base64`
+    // produces.
+    private static let rsa2048Asn1Header: [UInt8] = [
+        0x30, 0x82, 0x01, 0x22, 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
+        0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00, 0x03, 0x82, 0x01, 0x0f, 0x00
+    ]
+    private static let rsa3072Asn1Header: [UInt8] = [
+        0x30, 0x82, 0x01, 0xa2, 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
+        0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00, 0x03, 0x82, 0x01, 0x8f, 0x00
+    ]
+    private static let rsa4096Asn1Header: [UInt8] = [
+        0x30, 0x82, 0x02, 0x22, 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
+        0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00, 0x03, 0x82, 0x02, 0x0f, 0x00
+    ]
+    private static let ecDsaSecp256r1Asn1Header: [UInt8] = [
+        0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02,
+        0x01, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00
+    ]
+    private static let ecDsaSecp384r1Asn1Header: [UInt8] = [
+        0x30, 0x76, 0x30, 0x10, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02,
+        0x01, 0x06, 0x05, 0x2b, 0x81, 0x04, 0x00, 0x22, 0x03, 0x62, 0x00
+    ]
+
+    private func spkiHeader(keyType: String, sizeInBits: Int) -> [UInt8]? {
+        if keyType == (kSecAttrKeyTypeRSA as String) {
+            switch sizeInBits {
+            case 2048: return PinnedURLSessionSSDelegate.rsa2048Asn1Header
+            case 3072: return PinnedURLSessionSSDelegate.rsa3072Asn1Header
+            case 4096: return PinnedURLSessionSSDelegate.rsa4096Asn1Header
+            default: return nil
+            }
+        } else if keyType == (kSecAttrKeyTypeECSECPrimeRandom as String) {
+            switch sizeInBits {
+            case 256: return PinnedURLSessionSSDelegate.ecDsaSecp256r1Asn1Header
+            case 384: return PinnedURLSessionSSDelegate.ecDsaSecp384r1Asn1Header
+            default: return nil
+            }
+        }
+        return nil
+    }
+
+    // Fix: kSecAttrKeyType's value in the attributes dictionary returned by
+    // SecKeyCopyAttributes is not reliably a CFString/Swift String - depending on iOS
+    // version/key origin it can come back as an NSNumber (the constants themselves,
+    // e.g. kSecAttrKeyTypeRSA, are declared as CFString but their *value* is the
+    // literal digits "42"/"73"/etc., and some code paths in Security.framework hand
+    // that back as a number instead of the string). `as? String` silently returning
+    // nil for a perfectly normal RSA/EC key is a known, easy-to-hit gotcha - and here
+    // it would make extractPublicKeyHash() return nil (auth challenge rejected) even
+    // though everything else (the pin, the hashing) is completely correct.
+    private func coerceToKeyTypeString(_ value: Any?) -> String? {
+        if let s = value as? String { return s }
+        if let n = value as? NSNumber { return n.stringValue }
+        if let cf = value {
+            return "\(cf)"
+        }
+        return nil
+    }
+
     func extractPublicKeyHash(from serverTrust: SecTrust) -> String? {
-        guard let certificate = SecTrustGetCertificateAtIndex(serverTrust, 0) else { return nil }
-        guard let publicKey = SecCertificateCopyKey(certificate) else { return nil }
-        
-        var error: Unmanaged<CFError>?
-        guard let publicKeyData = SecKeyCopyExternalRepresentation(publicKey, &error) as Data? else {
+        guard let certificate = SecTrustGetCertificateAtIndex(serverTrust, 0) else {
+//            #if DEBUG
+//            print("[Pinning] FAIL: SecTrustGetCertificateAtIndex returned nil")
+//            #endif
             return nil
         }
-        
-        // Compute SHA-256 hash
-        var hash = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
-        publicKeyData.withUnsafeBytes {
-            _ = CC_SHA256($0.baseAddress, CC_LONG(publicKeyData.count), &hash)
+        guard let publicKey = SecCertificateCopyKey(certificate) else {
+//            #if DEBUG
+//            print("[Pinning] FAIL: SecCertificateCopyKey returned nil")
+//            #endif
+            return nil
         }
-        
+
+        var error: Unmanaged<CFError>?
+        guard let publicKeyData = SecKeyCopyExternalRepresentation(publicKey, &error) as Data? else {
+//            #if DEBUG
+//            print("[Pinning] FAIL: SecKeyCopyExternalRepresentation returned nil, error: \(String(describing: error))")
+//            #endif
+            return nil
+        }
+
+        let attributes = SecKeyCopyAttributes(publicKey) as? [CFString: Any]
+        let rawKeyType = attributes?[kSecAttrKeyType]
+        let keyType = coerceToKeyTypeString(rawKeyType)
+        let sizeInBits = attributes?[kSecAttrKeySizeInBits] as? Int
+
+        guard let keyType = keyType, let sizeInBits = sizeInBits,
+              let header = spkiHeader(keyType: keyType, sizeInBits: sizeInBits) else {
+            // Fix: unknown/unsupported key type or size - fail closed instead of
+            // silently hashing the wrong (raw, non-SPKI) bytes and always mismatching.
+//            #if DEBUG
+//            print("[Pinning] FAIL: unsupported/undetected key type or size. rawKeyType=\(String(describing: rawKeyType)) coercedKeyType=\(String(describing: keyType)) sizeInBits=\(String(describing: sizeInBits)) rsaConst=\(kSecAttrKeyTypeRSA) ecConst=\(kSecAttrKeyTypeECSECPrimeRandom)")
+//            #endif
+            return nil
+        }
+
+        var spki = Data(header)
+        spki.append(publicKeyData)
+
+        // Compute SHA-256 hash of the reconstructed SubjectPublicKeyInfo, matching
+        // what `openssl x509 -pubkey | openssl pkey -pubin -outform DER | openssl dgst -sha256` produces.
+        var hash = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
+        spki.withUnsafeBytes {
+            _ = CC_SHA256($0.baseAddress, CC_LONG(spki.count), &hash)
+        }
+
         let hashData = Data(hash)
         let base64Hash = hashData.base64EncodedString()
-        
+//        #if DEBUG
+//        print("[Pinning] computed SPKI hash = \(base64Hash) for keyType=\(keyType) size=\(sizeInBits)")
+//        #endif
+
         return base64Hash
     }
 }
