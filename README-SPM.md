@@ -7,7 +7,7 @@ SwiftPM (`Package.swift`), built from the same source — `StreamShield/Source`.
 
 ```swift
 .package(path: "../NexilisLibraryiOS/StreamShield")   // local
-.package(url: "https://github.com/alqindiirsyam-es/StreamShield.git", from: "1.0.0")
+.package(url: "https://github.com/alqindiirsyam-es/StreamShield.git", from: "5.1.12")
 ```
 
 ```swift
@@ -67,7 +67,7 @@ git subtree split --prefix=StreamShield -b spm-streamshield
 git push https://github.com/alqindiirsyam-es/StreamShield.git spm-streamshield:main
 
 git clone https://github.com/alqindiirsyam-es/StreamShield.git /tmp/StreamShield
-cd /tmp/StreamShield && git tag 1.0.0 && git push origin 1.0.0
+cd /tmp/StreamShield && git tag 5.1.12 && git push origin 5.1.12
 ```
 
 Keep the tag in step with `spec.version` in the podspec.
