@@ -25,9 +25,9 @@ let package = Package(
         )
     ],
     dependencies: [
-        // Shared with NexilisLite so an app can depend on both. Switch to a
-        // URL + version when publishing — see README-SPM.md.
-        .package(path: "../nuSDKService")
+        // Shared with NexilisLite so an app can depend on both without the
+        // two colliding on a duplicate nuSDKService target.
+        .package(url: "https://github.com/alqindiirsyam-es/nuSDKService.git", from: "5.0.2")
     ],
     targets: [
         .target(

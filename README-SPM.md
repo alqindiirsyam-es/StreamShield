@@ -7,7 +7,7 @@ SwiftPM (`Package.swift`), built from the same source — `StreamShield/Source`.
 
 ```swift
 .package(path: "../NexilisLibraryiOS/StreamShield")   // local
-.package(url: "https://<your-host>/StreamShield.git", from: "1.0.0")
+.package(url: "https://github.com/alqindiirsyam-es/StreamShield.git", from: "1.0.0")
 ```
 
 ```swift
@@ -57,15 +57,16 @@ is required here.
 
 ## Publishing
 
-Publish `../nuSDKService` first and swap the path dependency for a URL — the
-relative path only resolves inside this repository. Then:
+This package is published at
+**https://github.com/alqindiirsyam-es/StreamShield** and already depends on the
+published `nuSDKService` by URL. To cut a new release:
 
 ```bash
 cd /path/to/NexilisLibraryiOS
 git subtree split --prefix=StreamShield -b spm-streamshield
-git push https://<your-host>/StreamShield.git spm-streamshield:main
+git push https://github.com/alqindiirsyam-es/StreamShield.git spm-streamshield:main
 
-git clone https://<your-host>/StreamShield.git /tmp/StreamShield
+git clone https://github.com/alqindiirsyam-es/StreamShield.git /tmp/StreamShield
 cd /tmp/StreamShield && git tag 1.0.0 && git push origin 1.0.0
 ```
 
